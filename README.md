@@ -23,9 +23,9 @@ Then open `chrome://extensions`, turn on **Developer mode**, click **Load unpack
 Chrome doesn't notice code changes on its own. There are two ways to load them:
 
 1. **Rebuild and reload (simplest).** Run `npm run build`, then click the ↻ reload icon on the Tab Sort card in
-   `chrome://extensions`. Close and reopen the popup, and refresh the manager tab.
+   `chrome://extensions`, then refresh the manager tab.
 2. **Live reload while developing.** Run `npm run dev` and leave it running, with the extension loaded from `dist`.
-   Changes to the popup and manager appear immediately, and changes to the background script make the extension
+   Changes to the manager appear immediately, and changes to the background script make the extension
    reload itself. When you're done, run `npm run build` again: the dev version only works while the dev server is running.
 
 **Your data survives reloads.** Projects, settings and thumbnails are kept when the extension is reloaded or updated.
@@ -35,7 +35,7 @@ and reinstall.
 **Debugging:** the Tab Sort card in `chrome://extensions` has an **Errors** button and a **service worker** link, which
 opens the console for the background script.
 
-Shortcut: **⌥⇧T** (Alt+Shift+T) opens the manager. Change it at `chrome://extensions/shortcuts`.
+Click the Tab Sort toolbar icon, or press **⌥⇧T** (Alt+Shift+T), to open the manager. Change it at `chrome://extensions/shortcuts`.
 
 ## Develop
 

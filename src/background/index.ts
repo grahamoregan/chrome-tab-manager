@@ -56,6 +56,9 @@ chrome.runtime.onMessage.addListener((req: Request, _sender, sendResponse: (r: R
   return true; // async response
 });
 
+// No popup: the toolbar icon opens (or focuses) the manager.
+chrome.action.onClicked.addListener(() => void openManager());
+
 chrome.commands.onCommand.addListener((command) => {
   if (command === 'open-manager') void openManager();
 });

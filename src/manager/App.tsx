@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { isManagerUrl } from '../lib/actions';
 import { send } from '../lib/messages';
 import {
@@ -21,12 +21,14 @@ import { UndoBar, plural } from '../ui/components';
 import { useData, useLiveTabs, useSettings, useUndo } from '../ui/hooks';
 import { ContextMenu, type MenuState } from './ContextMenu';
 import { LinkPane } from './LinkPane';
+import { ReviewPane, useQuickCounts, type ReviewKind } from './Reviews';
 import { SettingsPane } from './SettingsPane';
 
 export type Pane =
   | { kind: 'project'; id: string }
   | { kind: 'window'; id: number }
   | { kind: 'settings' }
+  | { kind: 'review'; review: ReviewKind }
   | { kind: 'none' };
 
 export type DragPayload =
@@ -49,6 +51,15 @@ export function App() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const drag = useRef<DragPayload | null>(null);
+  const returnPane = useRef<Pane>({ kind: 'none' });
+
+  // Stale-feed counts depend on the clock as well as on tab changes.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const counts = useQuickCounts(live, settings, now);
 
   const projects = useMemo(() => sortedProjects(data, settings.projectSort), [data, settings.projectSort]);
   const sorted = useMemo(() => sortedLinkIds(data), [data]);
@@ -61,6 +72,15 @@ export function App() {
     [live.tabs, live.currentWindowId, mergeIds.join(',')],
   );
   const windowNumber = (id: number) => live.windowIds.indexOf(id) + 1;
+  const windowLabel = (id: number) => `Window ${windowNumber(id)}`;
+
+  const openReview = (review: ReviewKind) => {
+    if (pane.kind !== 'review') returnPane.current = pane;
+    setQuery('');
+    setNow(Date.now());
+    setPane({ kind: 'review', review });
+  };
+  const closeReview = () => setPane(returnPane.current);
 
   const merge = async () => {
     if (!mergePlan) return;
@@ -143,6 +163,11 @@ export function App() {
         />
         <span className="grow" />
         <UndoBar entry={undo} />
+        <nav className="quick-actions" aria-label="Quick actions">
+          <QuickButton label="Duplicates" count={counts.dupes} active={activePane.kind === 'review' && activePane.review === 'dupes'} onClick={() => openReview('dupes')} title="Close duplicate tabs" />
+          <QuickButton label="Stale feeds" count={counts.stale} active={activePane.kind === 'review' && activePane.review === 'stale'} onClick={() => openReview('stale')} title="Close feed home pages you haven't looked at for a while" />
+          <QuickButton label="Gather" count={counts.scattered} active={activePane.kind === 'review' && activePane.review === 'gather'} onClick={() => openReview('gather')} title="Pull each site's tabs into one window" />
+        </nav>
         <button
           className={`btn ${activePane.kind === 'settings' ? 'active' : ''}`}
           onClick={() => {
@@ -152,11 +177,27 @@ export function App() {
         >
           Settings
         </button>
+        <button
+          className="btn"
+          aria-label="More actions"
+          title="More actions"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setMenu({ x: r.right - 220, y: r.bottom + 4, items: [{ label: 'Save everything & close…', onClick: () => openReview('saveAll') }] });
+          }}
+        >
+          ⋯
+        </button>
       </header>
 
       <aside className="sidebar">
         <section>
-          <h3>Open tabs</h3>
+          <h3>
+            Open tabs{' '}
+            <span className="h3-stats">
+              · {plural(live.windowIds.length, 'window')} · {plural(live.tabs.filter((t) => !isManagerUrl(t.url)).length, 'tab')}
+            </span>
+          </h3>
           <ul className="list">
             {live.windowIds.map((id, i) => {
               const tabs = live.tabs.filter((t) => t.windowId === id && !isManagerUrl(t.url));
@@ -339,7 +380,9 @@ export function App() {
       </aside>
 
       <main className="main">
-        {activePane.kind === 'settings' && !query ? (
+        {activePane.kind === 'review' && !query ? (
+          <ReviewPane key={activePane.review} kind={activePane.review} live={live} settings={settings} now={now} windowLabel={windowLabel} onDone={closeReview} />
+        ) : activePane.kind === 'settings' && !query ? (
           <SettingsPane settings={settings} data={data} />
         ) : (
           <LinkPane
@@ -362,6 +405,19 @@ export function App() {
 
       {menu && <ContextMenu menu={menu} onClose={closeMenu} />}
     </div>
+  );
+}
+
+function QuickButton(props: { label: string; count: number; active: boolean; title: string; onClick: () => void }) {
+  return (
+    <button
+      className={`btn quick ${props.active ? 'active' : ''} ${props.count > 0 ? 'has-work' : ''}`}
+      disabled={props.count === 0 && !props.active}
+      title={props.title}
+      onClick={props.onClick}
+    >
+      {props.label} <span className="badge">{props.count}</span>
+    </button>
   );
 }
 

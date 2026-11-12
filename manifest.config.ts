@@ -7,7 +7,7 @@ export default defineManifest({
   description: pkg.description,
   version: pkg.version,
   icons: { 16: 'icons/icon16.png', 48: 'icons/icon48.png', 128: 'icons/icon128.png' },
-  action: { default_popup: 'src/popup/index.html', default_title: 'Tab Sort' },
+  action: { default_title: 'Open Tab Sort' },
   background: { service_worker: 'src/background/index.ts', type: 'module' },
   permissions: ['tabs', 'tabGroups', 'storage', 'unlimitedStorage', 'contextMenus', 'favicon'],
   host_permissions: ['<all_urls>'],

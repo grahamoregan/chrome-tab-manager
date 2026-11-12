@@ -209,3 +209,33 @@ code { background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
   background: var(--accent-soft);
 }
 .merge-bar p { margin: 0 0 6px; }
+
+.quick-actions { display: flex; gap: 6px; }
+.btn.quick { display: inline-flex; align-items: center; gap: 6px; }
+.btn.quick.has-work .badge { background: var(--accent); color: #fff; }
+.h3-stats { text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+.review { max-width: 980px; }
+.review-header { margin-bottom: 12px; }
+.review-header h2 { margin: 0; font-size: 18px; }
+.review-header p { margin: 6px 0 0; }
+.select-all { margin: 0 0 6px 8px; cursor: pointer; }
+.review-row.unticked .grow { color: var(--muted); text-decoration: line-through; }
+.dupe-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 4px;
+  margin-bottom: 8px;
+}
+.kept { background: var(--surface-2); }
+.kept-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ok);
+  width: 34px;
+  flex: none;
+}
+.dupe-group .review-row input { margin-left: 10px; margin-right: 6px; }
+.spread { max-width: 320px; font-size: 12px; }
+.search { width: auto; flex: 0 1 320px; }

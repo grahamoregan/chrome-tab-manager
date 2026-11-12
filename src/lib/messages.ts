@@ -1,4 +1,4 @@
-/** Typed messages from the popup/manager to the background service worker. */
+/** Typed messages from the manager to the background service worker. */
 import type { ClosedTab } from './storage';
 
 export type Request =

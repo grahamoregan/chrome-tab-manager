@@ -4,8 +4,7 @@ The agreed design, kept in step with the code. See `CLAUDE.md` for the original 
 **Status** marks what's built; **Planned** sections are agreed but not built yet.
 
 ## Surfaces
-- **Manager** (full tab, `src/manager/index.html`): "Open tabs" (windows) and projects on the left, links/tabs on the right, Settings. Opening it focuses an existing manager tab rather than creating a second. Shortcut: ⌥⇧T.
-- **Popup** (toolbar icon): window/tab stats and quick actions. *Being removed — see "Planned: manager-first".*
+- **Manager** (full tab, `src/manager/index.html`) is the whole UI. Clicking the toolbar icon or pressing ⌥⇧T opens it, or focuses the existing manager tab rather than creating a second. There is no popup.
 - **Chrome right-click menu** on pages and links: "Add to Tab Sort project ▸" listing the 25 most recently changed projects, plus "New project from this…".
 - Incognito is ignored.
 
@@ -13,7 +12,7 @@ The agreed design, kept in step with the code. See `CLAUDE.md` for the original 
 Manifest V3, TypeScript, Vite + `@crxjs/vite-plugin`, React, Vitest for pure logic.
 Loaded unpacked for personal use. MIT licence. Permissions: `tabs`, `tabGroups`, `storage`,
 `unlimitedStorage`, `contextMenus`, `favicon`, host `<all_urls>` (for `captureVisibleTab`).
-Tab-changing actions run in the background service worker (via messages), so they finish even if the page that started them closes.
+Tab-changing actions run in the background service worker (via messages), so they finish even if the manager tab moves or closes.
 
 ## Data model
 - **Link**: one per normalised URL — `{ id (= normalised URL), url, title, favIconUrl, addedAt }`.
@@ -59,7 +58,7 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 - Selection: click, ⌘-click, ⇧-click, ⌘A, Esc. Drag onto project = move; ⌥ while dropping = copy. Delete/Backspace removes selected links from the project.
 - Link context menu: Open/Focus, Open in new window, Copy to project ▸, Move to project ▸, Remove from this project.
 - Window tab context menu: Focus, Add to project ▸, New project from selection, Close tab(s).
-- **Window lists show unsorted tabs.** A tab is *sorted* once its normalised URL is in at least one project; sorted tabs drop out of the window list as soon as they're added (by drag, right-click or the popup), so the list works as an inbox of what's left to file. The manager's own tab is never listed. Other non-web tabs (chrome://, new tab) can't be saved, so they stay listed as unsorted until closed.
+- **Window lists show unsorted tabs.** A tab is *sorted* once its normalised URL is in at least one project; sorted tabs drop out of the window list as soon as they're added (by drag or right-click), so the list works as an inbox of what's left to file. The manager's own tab is never listed. Other non-web tabs (chrome://, new tab) can't be saved, so they stay listed as unsorted until closed.
   - Sidebar badge shows the unsorted count per window; the window header shows "N unsorted of M tabs".
   - A "Show sorted tabs" toggle in the window header shows every tab (sorted ones get their project chips), e.g. to focus or close them. Off by default.
   - When every tab in a window is sorted, the pane says so instead of looking empty.
@@ -71,8 +70,8 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 - Flat list sortable by name / recently changed; global search over titles and URLs.
 - List mode: open dot, favicon, title, domain, date added. Preview mode: thumbnail cards with project chips. Mode remembered per project.
 
-## Planned: manager-first (remove the popup)
-Clicking the toolbar icon opens the manager (or focuses it), same as ⌥⇧T. The popup is removed and its features move into the manager:
+## Manager-first quick actions
+The popup was removed (v0.2); its features moved into the manager:
 
 | Popup feature | Manager home |
 |---|---|
@@ -80,11 +79,11 @@ Clicking the toolbar icon opens the manager (or focuses it), same as ⌥⇧T. Th
 | Previews before closing | A review view in the main pane ("Review: 12 duplicates"): full list with a checkbox per tab (all ticked to start, untick to keep a tab), Close/Cancel at the top. Duplicates are grouped, showing which copy is kept. |
 | Gather list | Review view in the main pane: sites sorted by tab count with a **Gather** button each, **Tidy all** at the top |
 | Window/tab stats | Sidebar heading: "Open tabs · 5 windows · 142 tabs" |
-| Save to project… | Dropped — drag, right-click → Add to project, and "New project from this window" cover it |
+| Save to project… | Dropped: drag, right-click → Add to project, and "New project from this window" cover it |
 | Save everything & close | A **⋯** menu next to Settings (pending the archive decision) |
 | Undo | Stays in the top bar |
 
-- The quick-action counts update live as tabs change. A button with nothing to do is disabled.
+- The quick-action counts update live as tabs change (stale-feed counts also re-check every minute). A button with nothing to do is disabled.
 - After a review action completes, the main pane returns to what it showed before.
 - Trade-off accepted: the popup worked without leaving the current page; the manager is a tab. A toolbar badge with the duplicate count is a possible follow-up.
 
@@ -94,10 +93,10 @@ Proposed answers awaiting confirmation: a separate "Archives" sidebar section wh
 
 ## Build history
 1. Scaffold + pure logic with tests. ✅
-2. Popup quick actions + preview/Undo. ✅
+2. Popup quick actions + preview/Undo. ✅ (popup later removed)
 3. Data layer + thumbnails. ✅
 4. Manager. ✅
 5. Save & close, open project, context menus, settings, export/import. ✅
 6. Unsorted window lists, × to close tabs, merge windows. ✅
-7. Manager-first (remove popup). ⏳
+7. Manager-first (remove popup). ✅
 8. Archive & close. ⏳ (after decisions)
