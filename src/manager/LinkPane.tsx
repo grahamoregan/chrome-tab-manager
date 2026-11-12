@@ -171,6 +171,14 @@ export function LinkPane(props: {
     for (const i of list) await request({ type: 'focusOrOpen', url: i.url });
   };
 
+  const archiveItems = (list: Item[]) => {
+    if (!project || list.length === 0) return;
+    void updateData(
+      (d) => setDone(d, project.id, linkIdsOf(list), true),
+      list.length === 1 ? `Archived “${list[0].title}”` : `Archived ${plural(list.length, 'link')}`,
+    );
+  };
+
   const removeFromProject = (list: Item[]) => {
     if (!project || list.length === 0) return;
     void updateData((d) => removeLinks(d, project.id, linkIdsOf(list)), `Removed ${plural(list.length, 'link')} from ${project.name}`);
@@ -187,8 +195,13 @@ export function LinkPane(props: {
         sel.selectAll();
       } else if (e.key === 'Escape') {
         sel.clear();
-      } else if ((e.key === 'Delete' || e.key === 'Backspace') && project && sel.selected.size) {
-        removeFromProject(selectedItems(order.filter((k) => sel.selected.has(k))));
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && project && !isSearch && sel.selected.size) {
+        // Same as ×: archive active links, remove archived ones.
+        const chosen = selectedItems(order.filter((k) => sel.selected.has(k)));
+        const active = chosen.filter((i) => !i.done);
+        const archived = chosen.filter((i) => i.done);
+        if (active.length) archiveItems(active);
+        if (archived.length) removeFromProject(archived);
       } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && project && !isSearch && sel.selected.size) {
         e.preventDefault();
         const ids = selectedItems(order.filter((k) => sel.selected.has(k))).filter((i) => !i.done).map((i) => i.linkId);
@@ -411,11 +424,6 @@ export function LinkPane(props: {
     return (
       <div className="col-head" role="row">
         <span className="col-dot" />
-        {project && (
-          <span className="col col-read" title="Tick a link to archive it. Archived links move to the Archived section at the bottom.">
-            Archive
-          </span>
-        )}
         <span className="col-fav" />
         <span className="col-title-wrap">
           {cell('title', 'col-title')}
@@ -427,7 +435,7 @@ export function LinkPane(props: {
         </span>
         {cell('site', 'col-site')}
         {cell(dateColumn, 'col-date')}
-        {!project && <span className="col-close" />}
+        <span className="col-close" />
       </div>
     );
   }
@@ -491,15 +499,17 @@ export function LinkPane(props: {
                 setDropAt(null);
                 props.onDragEnd();
               }}
-              onClose={item.tabId !== undefined ? () => closeItems([item]) : undefined}
+              onClose={
+                item.tabId !== undefined
+                  ? () => closeItems([item])
+                  : project && !isSearch
+                    ? () => (item.done ? removeFromProject([item]) : archiveItems([item]))
+                    : undefined
+              }
+              closeLabel={item.tabId !== undefined ? 'Close tab' : item.done ? 'Remove from project' : 'Archive'}
               dropEdge={dropAt?.key === item.key ? dropAt.edge : null}
               onRowDragOver={reorderable ? (e) => rowDragOver(e, item) : undefined}
               onRowDrop={reorderable ? (e) => rowDrop(e, item) : undefined}
-              onToggleDone={
-                project && !isSearch
-                  ? () => void updateData((d) => setDone(d, project.id, [item.linkId], !item.done), `${item.done ? 'Unarchived' : 'Archived'} “${item.title}”`)
-                  : undefined
-              }
             />
           ))}
         </ul>
@@ -665,41 +675,22 @@ function Row(props: {
   onContextMenu: (e: MouseEvent) => void;
   onDragStart: (e: DragEvent) => void;
   onDragEnd: () => void;
-  /** Present only for live tabs: shows a × that closes the tab. */
+  /** Shows a × on the right: closes a tab, archives an active project link, or removes an archived one. */
   onClose?: () => void;
-  /** Present in a project: shows the done tick. */
-  onToggleDone?: () => void;
+  closeLabel?: string;
   /** Drop indicator while reordering. */
   dropEdge: 'before' | 'after' | null;
   onRowDragOver?: (e: DragEvent) => void;
   onRowDrop?: (e: DragEvent) => void;
 }) {
   const { item, mode } = props;
-  const doneButton = props.onToggleDone && (
-    <button
-      className={`done-tick ${item.done ? 'is-done' : ''}`}
-      role="checkbox"
-      aria-checked={!!item.done}
-      aria-label={`${item.done ? 'Unarchive' : 'Archive'}: ${item.title}`}
-      title={item.done ? 'Archived. Click to unarchive' : 'Archive'}
-      draggable={false}
-      onClick={(e) => {
-        e.stopPropagation();
-        props.onToggleDone?.();
-      }}
-      onDoubleClick={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.stopPropagation()}
-    >
-      ✓
-    </button>
-  );
   const dropClass = props.dropEdge ? `drop-${props.dropEdge}` : '';
   const doneClass = item.done ? 'is-done-row' : '';
   const closeButton = props.onClose && (
     <button
-      className="close-tab"
-      aria-label={`Close tab: ${item.title}`}
-      title="Close tab"
+      className={`close-tab ${item.done ? 'remove' : ''}`}
+      aria-label={`${props.closeLabel ?? 'Close tab'}: ${item.title}`}
+      title={props.closeLabel ?? 'Close tab'}
       draggable={false}
       onClick={(e) => {
         e.stopPropagation();
@@ -729,12 +720,11 @@ function Row(props: {
       <li className={`card ${props.selected ? 'selected' : ''} ${dropClass} ${doneClass}`} {...common}>
         <div className="thumb">
           {thumb ? <img src={thumb} alt="" draggable={false} /> : <Favicon url={item.url} size={32} />}
-          {props.open && !closeButton && <span className="dot open-dot" title="Open in a tab" />}
+          {props.open && <span className={`dot open-dot ${closeButton ? 'left' : ''}`} title="Open in a tab" />}
           {closeButton}
         </div>
         <div className="card-body">
           <div className="row">
-            {doneButton}
             <Favicon url={item.url} />
             <span className="grow ellipsis card-title">{item.title}</span>
           </div>
@@ -756,7 +746,6 @@ function Row(props: {
   return (
     <li className={`list-item link-row ${props.selected ? 'selected' : ''} ${dropClass} ${doneClass}`} {...common}>
       <span className={`dot ${props.open ? '' : 'off'}`} title={props.open ? 'Open in a tab' : undefined} />
-      {doneButton}
       <Favicon url={item.url} />
       <span className="grow ellipsis">{item.title}</span>
       {props.listChips && props.chips.length > 0 && (

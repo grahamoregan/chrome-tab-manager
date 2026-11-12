@@ -85,9 +85,13 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 
 ## Ordering and catching up within a project
 - **Manual order** (default): drag links up/down within the project (a line shows where they'll land; several selected links move together as a block). Right-click → **Move to top** / **Move to bottom**. **⌥↑ / ⌥↓** nudge the selection one place. Works in list and preview mode. Dropping onto a project in the sidebar still moves links between projects.
-- **Column headers** (list mode): projects show **Archive · Title · Site · Added**; tab lists show **Title · Site · Last viewed** (when the tab was last looked at). The headers make clear what the round tick is for.
+- **Column headers** (list mode): projects show **Title · Site · Added**; tab lists show **Title · Site · Last viewed** (when the tab was last looked at).
 - **Sorting by column**: click a column name to sort by it (text A→Z, dates newest first); click again to reverse; a third click, or the **Remove sort** link beside the Title column, returns to manual order (projects) or Chrome's tab order (tab lists). An arrow shows the active column and direction. Sorts are views only and never change the manual order; drag-to-reorder only works in manual order. Moving to top/bottom or nudging switches the project back to manual. A project remembers its sort; tab lists start in tab order each visit. With several windows shown, sorting applies within each window's group. Preview mode has no columns, so a sort dropdown in the header offers the same choices. Search results aren't sortable.
-- **Archive**: a round tick on each link, with clear space before the favicon (and right-click → Archive / Unarchive). Archived links leave the main list and collect in a collapsed **Archived (n)** section at the bottom, in the same sort. Unticking puts a link back in its manual position.
+- **× to archive, × again to remove** (same place as the × that closes tabs):
+  - Each active link has a **×** at the right of its row (top-right of a preview card). It **archives** the link: it leaves the main list and collects in a collapsed **Archived (n)** section at the bottom, in the same sort.
+  - In the Archived section, **×** **removes** the link from the project completely.
+  - Both can be undone. Delete/Backspace does the same as × for the selected links.
+  - Right-click → **Archive** / **Unarchive** (back to its manual position) and **Remove from this project** (immediately, from either list).
 - The project's sidebar badge shows links still **active** (not archived); hover shows "3 active · 5 archived".
 - **Open project** opens only active links.
 - Moving a link to another project doesn't carry its archived state; copying doesn't either.
@@ -135,4 +139,5 @@ Proposed answers awaiting confirmation: a separate "Archives" sidebar section wh
 10. Ordering, sorting and done within projects. ✅
 11. Column headers, column sorting, "read" wording; save & close skips saved tabs. ✅
 12. "Read" renamed "Archive"; "Remove sort"; more space after the tick. ✅
-13. Archive & close. ⏳ (after decisions; may be unnecessary now)
+13. Tick replaced by × (archive, then × in Archived removes). ✅
+14. Archive & close. ⏳ (after decisions; may be unnecessary now)
