@@ -14,6 +14,7 @@ import {
   type Project,
 } from '../lib/model';
 import { isManagerUrl } from '../lib/actions';
+import { matchesQuery, queryWords } from '../lib/search';
 import { updateData } from '../lib/storage';
 import { isWebUrl, normaliseUrl } from '../lib/url';
 import { Favicon, Host, ago, plural } from '../ui/components';
@@ -29,6 +30,7 @@ interface Item {
   title: string;
   addedAt?: number;
   tabId?: number;
+  windowId?: number;
 }
 
 const OPEN_CONFIRM_THRESHOLD = 20;
@@ -54,9 +56,29 @@ export function LinkPane(props: {
   const sorted = useMemo(() => sortedLinkIds(data), [data]);
   const windowTabCount = pane.kind === 'window' ? live.tabs.filter((t) => t.windowId === pane.id && !isManagerUrl(t.url)).length : 0;
 
+  const tabItem = (t: LiveTabs['tabs'][number]): Item => ({
+    key: `t${t.id}`,
+    linkId: normaliseUrl(t.url),
+    url: t.url,
+    title: t.title || t.url,
+    tabId: t.id,
+    windowId: t.windowId,
+  });
+
   const items: Item[] = useMemo(() => {
     if (isSearch) {
-      return searchLinks(data, query).map((l) => ({ key: l.id, linkId: l.id, url: l.url, title: l.title, addedAt: l.addedAt }));
+      // Open tabs first (all windows, sorted or not), then saved links.
+      const words = queryWords(query);
+      const tabs = live.tabs
+        .filter((t) => !isManagerUrl(t.url) && matchesQuery(words, t.title, t.url))
+        .sort((a, b) => live.windowIds.indexOf(a.windowId) - live.windowIds.indexOf(b.windowId) || (a.index ?? 0) - (b.index ?? 0))
+        .map(tabItem);
+      // A saved link that's open is already listed (with its project chips) under Open tabs.
+      const shown = new Set(tabs.map((t) => t.linkId));
+      const links = searchLinks(data, query)
+        .filter((l) => !shown.has(l.id))
+        .map((l) => ({ key: l.id, linkId: l.id, url: l.url, title: l.title, addedAt: l.addedAt }));
+      return [...tabs, ...links];
     }
     if (project) {
       return project.linkIds
@@ -68,10 +90,13 @@ export function LinkPane(props: {
       return live.tabs
         .filter((t) => t.windowId === pane.id && !isManagerUrl(t.url) && (showSorted || isUnsorted(t.url, sorted)))
         .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
-        .map((t) => ({ key: `t${t.id}`, linkId: normaliseUrl(t.url), url: t.url, title: t.title || t.url, tabId: t.id }));
+        .map(tabItem);
     }
     return [];
-  }, [isSearch, query, data, project, pane, live.tabs, showSorted, sorted]);
+  }, [isSearch, query, data, project, pane, live.tabs, live.windowIds, showSorted, sorted]);
+  const tabResults = isSearch ? items.filter((i) => i.tabId !== undefined) : [];
+  const linkResults = isSearch ? items.filter((i) => i.tabId === undefined) : [];
+  const windowLabel = (id?: number) => (id === undefined ? '' : `Window ${live.windowIds.indexOf(id) + 1}`);
 
   const order = useMemo(() => items.map((i) => i.key), [items]);
   const sel = useSelection(order);
@@ -126,13 +151,15 @@ export function LinkPane(props: {
 
   const onContextMenu = (e: MouseEvent, key: string) => {
     e.preventDefault();
-    const list = selectedItems(sel.ensure(key));
+    // A selection can mix open tabs and saved links (in search); act on the same kind as the clicked row.
+    const isTab = byKey.get(key)?.tabId !== undefined;
+    const list = selectedItems(sel.ensure(key)).filter((i) => (i.tabId !== undefined) === isTab);
     const n = list.length;
     const allOpen = list.every((i) => openKeys.has(i.linkId));
     const openLabel = n === 1 ? (allOpen ? 'Focus tab' : 'Open') : allOpen ? `Focus ${n} tabs` : `Open ${n} links`;
     const items: (MenuItem | 'separator')[] = [];
 
-    if (pane.kind === 'window' && !isSearch) {
+    if (isTab) {
       items.push(
         { label: n === 1 ? 'Focus tab' : `Focus ${n} tabs`, onClick: () => void openItems(list) },
         { label: 'Add to project', submenu: projectSubmenu(undefined, (p) => void updateData((d) => addLinks(d, p.id, inputsOf(list)), `Added ${plural(n, 'link')} to ${p.name}`)) },
@@ -193,6 +220,7 @@ export function LinkPane(props: {
         project={project}
         windowIndex={windowIndex}
         count={items.length}
+        searchCounts={{ tabs: tabResults.length, links: linkResults.length }}
         windowTabCount={windowTabCount}
         showSorted={showSorted}
         onShowSorted={setShowSorted}
@@ -205,7 +233,7 @@ export function LinkPane(props: {
       {items.length === 0 ? (
         <p className="muted empty">
           {isSearch
-            ? 'No saved links match.'
+            ? 'No open tabs or saved links match.'
             : project
               ? 'This project is empty. Drag tabs in from a window on the left, or right-click a page and choose “Add to Tab Sort project”.'
               : pane.kind === 'window'
@@ -214,9 +242,31 @@ export function LinkPane(props: {
                   : 'No tabs in this window.'
                 : 'Create a project, or pick a window on the left to see its tabs.'}
         </p>
+      ) : isSearch ? (
+        <>
+          {tabResults.length > 0 && (
+            <section className="results">
+              <h3 className="results-heading">Open tabs</h3>
+              {renderList(tabResults)}
+            </section>
+          )}
+          {linkResults.length > 0 && (
+            <section className="results">
+              <h3 className="results-heading">Saved links</h3>
+              {renderList(linkResults)}
+            </section>
+          )}
+        </>
       ) : (
+        renderList(items)
+      )}
+    </div>
+  );
+
+  function renderList(list: Item[]) {
+    return (
         <ul className={viewMode === 'preview' ? 'cards' : 'list rows'} onClick={(e) => e.target === e.currentTarget && sel.clear()}>
-          {items.map((item) => (
+          {list.map((item) => (
             <Row
               key={item.key}
               item={item}
@@ -224,19 +274,19 @@ export function LinkPane(props: {
               selected={sel.selected.has(item.key)}
               open={openKeys.has(item.linkId)}
               chips={chips.get(item.linkId) ?? []}
-              listChips={pane.kind === 'window' && !isSearch && showSorted}
+              listChips={item.tabId !== undefined && (isSearch || showSorted)}
+              where={isSearch && item.tabId !== undefined ? windowLabel(item.windowId) : undefined}
               onClick={(e) => sel.click(item.key, e)}
               onDoubleClick={() => void openItems([item])}
               onContextMenu={(e) => onContextMenu(e, item.key)}
               onDragStart={(e) => onDragStart(e, item.key)}
               onDragEnd={props.onDragEnd}
-              onClose={item.tabId !== undefined && !isSearch ? () => closeItems([item]) : undefined}
+              onClose={item.tabId !== undefined ? () => closeItems([item]) : undefined}
             />
           ))}
         </ul>
-      )}
-    </div>
-  );
+    );
+  }
 }
 
 function Header(props: {
@@ -246,6 +296,7 @@ function Header(props: {
   project?: Project;
   windowIndex: number;
   count: number;
+  searchCounts: { tabs: number; links: number };
   windowTabCount: number;
   showSorted: boolean;
   onShowSorted: (v: boolean) => void;
@@ -259,7 +310,7 @@ function Header(props: {
   const [name, setName] = useState(project?.name ?? '');
 
   let title: React.ReactNode;
-  if (props.isSearch) title = <h2>Results for “{props.query.trim()}”</h2>;
+  if (props.isSearch) title = <h2>Search: “{props.query.trim()}”</h2>;
   else if (project)
     title = editing ? (
       <form
@@ -299,7 +350,9 @@ function Header(props: {
       <div className="grow row">
         {title}
         <span className="muted">
-          {props.pane.kind === 'window' && !props.isSearch
+          {props.isSearch
+            ? `${plural(props.searchCounts.tabs, 'open tab')} · ${plural(props.searchCounts.links, 'saved link')}`
+            : props.pane.kind === 'window'
             ? props.showSorted
               ? plural(props.windowTabCount, 'tab')
               : `${props.count} unsorted of ${plural(props.windowTabCount, 'tab')}`
@@ -352,6 +405,8 @@ function Row(props: {
   open: boolean;
   chips: Project[];
   listChips?: boolean;
+  /** Shown in place of the date added, e.g. which window a tab is in. */
+  where?: string;
   onClick: (e: MouseEvent) => void;
   onDoubleClick: () => void;
   onContextMenu: (e: MouseEvent) => void;
@@ -431,7 +486,11 @@ function Row(props: {
         </span>
       )}
       <Host url={item.url} />
-      {item.addedAt !== undefined && <span className="added muted">{ago(item.addedAt)}</span>}
+      {props.where !== undefined ? (
+        <span className="added muted">{props.where}</span>
+      ) : (
+        item.addedAt !== undefined && <span className="added muted">{ago(item.addedAt)}</span>
+      )}
       {closeButton}
     </li>
   );

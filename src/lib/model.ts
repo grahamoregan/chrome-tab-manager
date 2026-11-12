@@ -1,3 +1,4 @@
+import { matchesQuery, queryWords } from './search';
 import { normaliseUrl } from './url';
 
 /** One saved link, shared by every project that contains it. `id` is the normalised URL. */
@@ -178,13 +179,10 @@ export function sortedProjects(data: Data, sort: ProjectSort): Project[] {
     : list.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-/** Case-insensitive search over link titles and URLs across all projects. */
+/** Search over saved link titles and URLs across all projects (every word must match). */
 export function searchLinks(data: Data, query: string): Link[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
-  return Object.values(data.links).filter(
-    (l) => l.title.toLowerCase().includes(q) || l.url.toLowerCase().includes(q),
-  );
+  const words = queryWords(query);
+  return Object.values(data.links).filter((l) => matchesQuery(words, l.title, l.url));
 }
 
 /** Validates and returns imported data, or throws. */

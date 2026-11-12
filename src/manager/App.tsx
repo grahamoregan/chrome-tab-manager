@@ -52,6 +52,21 @@ export function App() {
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const drag = useRef<DragPayload | null>(null);
   const returnPane = useRef<Pane>({ kind: 'none' });
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // ⌘F / Ctrl+F or "/" focuses search (unless already typing somewhere).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const typing = (e.target as HTMLElement).closest('input, textarea, select');
+      if (((e.metaKey || e.ctrlKey) && e.key === 'f') || (e.key === '/' && !typing)) {
+        e.preventDefault();
+        searchRef.current?.focus();
+        searchRef.current?.select();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   // Stale-feed counts depend on the clock as well as on tab changes.
   const [now, setNow] = useState(() => Date.now());
@@ -155,11 +170,20 @@ export function App() {
       <header className="topbar">
         <strong className="brand">Tab Sort</strong>
         <input
+          ref={searchRef}
           type="search"
           className="search"
-          placeholder="Search all projects…"
+          placeholder="Search"
+          aria-label="Search open tabs and saved links"
+          title="Search open tabs and saved links (⌘F or /)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setQuery('');
+              e.currentTarget.blur();
+            }
+          }}
         />
         <span className="grow" />
         <UndoBar entry={undo} />

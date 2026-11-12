@@ -67,7 +67,15 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 - **Save everything & close**: saves every web tab into one project "Saved session – <date time>" (option: one project per window), merging duplicates, then closes all tabs except the manager and pinned tabs (pinned tabs are still saved). Undo reopens the tabs *and* removes the session project. *Under review — may be replaced by "Archive & close all".*
 - Open project: new window, skip already-open links, confirm if > 20, tabs load only when clicked (created then discarded).
 - Delete projects (multi-select): never closes tabs; Undo available.
-- Flat list sortable by name / recently changed; global search over titles and URLs.
+- Flat list sortable by name / recently changed.
+- **Right-click menus stay on screen.** The menu is moved left/up if it would go past the window edge. Submenus (Add/Copy/Move to project ▸) open to the right, or to the left when there isn't room, and are shifted up and scroll if the project list is taller than the space below.
+
+## Search
+- The top-bar box is just **Search** (⌘F or `/` focuses it, Esc clears it). It searches titles and URLs; every word must match, in any order, ignoring case.
+- Results replace the main pane in two sections:
+  1. **Open tabs** across all windows, sorted or not (the manager's own tab excluded), showing the window and any project chips. They behave like tabs in a window list: × to close, double-click to focus, drag to a project, right-click for Focus / Add to project / Close.
+  2. **Saved links** in projects, as before (Open/Focus, Open in new window, Copy to project). A saved link that's already listed under Open tabs isn't repeated; its project chips show it's saved.
+- Open tabs come first because finding a tab is the common case. Either section is hidden when it has no matches.
 - List mode: open dot, favicon, title, domain, date added. Preview mode: thumbnail cards with project chips. Mode remembered per project.
 
 ## Manager-first quick actions
