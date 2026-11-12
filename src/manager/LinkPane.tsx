@@ -1,7 +1,16 @@
-import { useEffect, useMemo, useState, type DragEvent, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent } from 'react';
 import {
   addLinks,
+  addedToProject,
   copyLinks,
+  moveToBottom,
+  moveToTop,
+  nudgeLinks,
+  orderedLinks,
+  reorderLinks,
+  setDone,
+  setSort,
+  type LinkSort,
   moveLinks,
   isUnsorted,
   removeLinks,
@@ -31,7 +40,17 @@ interface Item {
   addedAt?: number;
   tabId?: number;
   windowId?: number;
+  /** Marked done in the current project. */
+  done?: boolean;
 }
+
+const SORT_LABELS: Record<LinkSort, string> = {
+  manual: 'Manual order',
+  newest: 'Newest added',
+  oldest: 'Oldest added',
+  title: 'Title',
+  site: 'Site',
+};
 
 const OPEN_CONFIRM_THRESHOLD = 20;
 
@@ -59,6 +78,11 @@ export function LinkPane(props: {
   const isSearch = query.trim() !== '';
   const [localMode, setLocalMode] = useState<Project['viewMode']>('list');
   const [showSorted, setShowSorted] = useState(false);
+  const [showDone, setShowDone] = useState(false);
+  const ordered = useMemo(() => (project ? orderedLinks(data, project) : null), [data, project]);
+  const reorderable = !!project && !isSearch && (project.sort ?? 'manual') === 'manual';
+  const reorderKeys = useRef<string[] | null>(null);
+  const [dropAt, setDropAt] = useState<{ key: string; edge: 'before' | 'after' } | null>(null);
   const viewMode = project ? project.viewMode : localMode;
   const sorted = useMemo(() => sortedLinkIds(data), [data]);
   const windowTabCount = isTabs ? live.tabs.filter((t) => shownWindows.includes(t.windowId) && !isManagerUrl(t.url)).length : 0;
@@ -87,11 +111,16 @@ export function LinkPane(props: {
         .map((l) => ({ key: l.id, linkId: l.id, url: l.url, title: l.title, addedAt: l.addedAt }));
       return [...tabs, ...links];
     }
-    if (project) {
-      return project.linkIds
-        .map((id) => data.links[id])
-        .filter((l) => !!l)
-        .map((l) => ({ key: l.id, linkId: l.id, url: l.url, title: l.title, addedAt: l.addedAt }));
+    if (project && ordered) {
+      const toItem = (l: (typeof ordered.active)[number], done: boolean): Item => ({
+        key: l.id,
+        linkId: l.id,
+        url: l.url,
+        title: l.title,
+        addedAt: addedToProject(data, project, l.id),
+        done,
+      });
+      return [...ordered.active.map((l) => toItem(l, false)), ...(showDone ? ordered.done.map((l) => toItem(l, true)) : [])];
     }
     if (isTabs) {
       return live.tabs
@@ -100,7 +129,7 @@ export function LinkPane(props: {
         .map(tabItem);
     }
     return [];
-  }, [isSearch, query, data, project, isTabs, shownWindows.join(','), live.tabs, live.windowIds, showSorted, sorted]);
+  }, [isSearch, query, data, project, ordered, showDone, isTabs, shownWindows.join(','), live.tabs, live.windowIds, showSorted, sorted]);
   const tabResults = isSearch ? items.filter((i) => i.tabId !== undefined) : [];
   const linkResults = isSearch ? items.filter((i) => i.tabId === undefined) : [];
   const windowLabel = (id?: number) => (id === undefined ? '' : `Window ${live.windowIds.indexOf(id) + 1}`);
@@ -141,6 +170,10 @@ export function LinkPane(props: {
         sel.clear();
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && project && sel.selected.size) {
         removeFromProject(selectedItems(order.filter((k) => sel.selected.has(k))));
+      } else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && project && !isSearch && sel.selected.size) {
+        e.preventDefault();
+        const ids = selectedItems(order.filter((k) => sel.selected.has(k))).filter((i) => !i.done).map((i) => i.linkId);
+        if (ids.length) void updateData((d) => nudgeLinks(d, project.id, ids, e.key === 'ArrowUp' ? -1 : 1));
       }
     };
     document.addEventListener('keydown', onKey);
@@ -184,6 +217,25 @@ export function LinkPane(props: {
           submenu: projectSubmenu(project?.id, (p) => void updateData((d) => copyLinks(d, linkIdsOf(list), p.id), `Copied ${plural(n, 'link')} to ${p.name}`)),
         },
       );
+      if (project && !isSearch) {
+        const allDone = list.every((i) => i.done);
+        const notDone = list.filter((i) => !i.done).map((i) => i.linkId);
+        items.splice(
+          2,
+          0,
+          'separator',
+          {
+            label: allDone ? 'Mark as not done' : 'Mark as done',
+            onClick: () =>
+              void updateData(
+                (d) => setDone(d, project.id, linkIdsOf(list), !allDone),
+                `Marked ${plural(n, 'link')} as ${allDone ? 'not done' : 'done'}`,
+              ),
+          },
+          { label: 'Move to top', disabled: notDone.length === 0, onClick: () => void updateData((d) => moveToTop(d, project.id, notDone), `Moved ${plural(notDone.length, 'link')} to the top`) },
+          { label: 'Move to bottom', disabled: notDone.length === 0, onClick: () => void updateData((d) => moveToBottom(d, project.id, notDone), `Moved ${plural(notDone.length, 'link')} to the bottom`) },
+        );
+      }
       if (project) {
         items.push(
           {
@@ -200,6 +252,7 @@ export function LinkPane(props: {
 
   const onDragStart = (e: DragEvent, key: string) => {
     const list = selectedItems(sel.ensure(key));
+    reorderKeys.current = reorderable && list.every((i) => !i.done) ? list.map((i) => i.linkId) : null;
     e.dataTransfer.effectAllowed = 'copyMove';
     e.dataTransfer.setData('text/uri-list', list.map((i) => i.url).join('\n'));
     e.dataTransfer.setData('text/plain', list.map((i) => i.url).join('\n'));
@@ -242,7 +295,11 @@ export function LinkPane(props: {
         viewMode={viewMode}
         onViewMode={(m) => (project ? void updateData((d) => setViewMode(d, project.id, m)) : setLocalMode(m))}
         onNewFromWindow={() => props.onNewProject(`Window ${windowIndex + 1} – ${new Date().toLocaleDateString()}`, inputsOf(items))}
-        openableCount={items.filter((i) => !openKeys.has(i.linkId)).length}
+        openableCount={items.filter((i) => !i.done && !openKeys.has(i.linkId)).length}
+        sort={project?.sort ?? 'manual'}
+        onSort={(sort) => project && void updateData((d) => setSort(d, project.id, sort))}
+        doneCount={ordered?.done.length ?? 0}
+        toGo={ordered?.active.length ?? 0}
       />
 
       {items.length === 0 ? (
@@ -287,11 +344,53 @@ export function LinkPane(props: {
               {renderList(g.list)}
             </section>
           ))
+      ) : project && ordered ? (
+        <>
+          {renderList(items.filter((i) => !i.done))}
+          {ordered.active.length === 0 && <p className="muted empty">All caught up: everything in this project is done.</p>}
+          {ordered.done.length > 0 && (
+            <section className="done-section">
+              <button className="results-heading window-heading" aria-expanded={showDone} onClick={() => setShowDone((v) => !v)}>
+                {showDone ? '▾' : '▸'} Done ({ordered.done.length})
+              </button>
+              {showDone && renderList(items.filter((i) => i.done))}
+            </section>
+          )}
+        </>
       ) : (
         renderList(items)
       )}
     </div>
   );
+
+  /** Where in manual order a drop on `item` lands: before it, or before the next link that isn't being dragged. */
+  function dropBeforeId(item: Item, edge: 'before' | 'after', moving: string[]): string | null {
+    if (edge === 'before') return item.linkId;
+    const rest = project!.linkIds.filter((id) => !moving.includes(id));
+    return rest[rest.indexOf(item.linkId) + 1] ?? null;
+  }
+
+  function rowDragOver(e: DragEvent, item: Item) {
+    const moving = reorderKeys.current;
+    if (!moving || item.done || moving.includes(item.linkId)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const edge = viewMode === 'preview' ? (e.clientX < r.left + r.width / 2 ? 'before' : 'after') : e.clientY < r.top + r.height / 2 ? 'before' : 'after';
+    if (dropAt?.key !== item.key || dropAt.edge !== edge) setDropAt({ key: item.key, edge });
+  }
+
+  function rowDrop(e: DragEvent, item: Item) {
+    const moving = reorderKeys.current;
+    if (!moving || !project || item.done || moving.includes(item.linkId)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const edge = dropAt?.key === item.key ? dropAt.edge : 'before';
+    const before = dropBeforeId(item, edge, moving);
+    setDropAt(null);
+    reorderKeys.current = null;
+    void updateData((d) => reorderLinks(d, project.id, moving, before), `Reordered ${plural(moving.length, 'link')}`);
+  }
 
   function renderList(list: Item[]) {
     return (
@@ -310,8 +409,20 @@ export function LinkPane(props: {
               onDoubleClick={() => void openItems([item])}
               onContextMenu={(e) => onContextMenu(e, item.key)}
               onDragStart={(e) => onDragStart(e, item.key)}
-              onDragEnd={props.onDragEnd}
+              onDragEnd={() => {
+                reorderKeys.current = null;
+                setDropAt(null);
+                props.onDragEnd();
+              }}
               onClose={item.tabId !== undefined ? () => closeItems([item]) : undefined}
+              dropEdge={dropAt?.key === item.key ? dropAt.edge : null}
+              onRowDragOver={reorderable ? (e) => rowDragOver(e, item) : undefined}
+              onRowDrop={reorderable ? (e) => rowDrop(e, item) : undefined}
+              onToggleDone={
+                project && !isSearch
+                  ? () => void updateData((d) => setDone(d, project.id, [item.linkId], !item.done), `Marked “${item.title}” as ${item.done ? 'not done' : 'done'}`)
+                  : undefined
+              }
             />
           ))}
         </ul>
@@ -336,6 +447,10 @@ function Header(props: {
   onViewMode: (m: Project['viewMode']) => void;
   onNewFromWindow: () => void;
   openableCount: number;
+  sort: LinkSort;
+  onSort: (s: LinkSort) => void;
+  doneCount: number;
+  toGo: number;
 }) {
   const { project } = props;
   const [editing, setEditing] = useState(false);
@@ -388,7 +503,9 @@ function Header(props: {
             ? props.showSorted
               ? plural(props.windowTabCount, 'tab')
               : `${props.count} unsorted of ${plural(props.windowTabCount, 'tab')}`
-            : plural(props.count, 'link')}
+            : props.project && props.doneCount
+              ? `${props.toGo} to go · ${props.doneCount} done`
+              : plural(props.count, 'link')}
         </span>
       </div>
       {props.pane.kind === 'tabs' && !props.isSearch && (
@@ -413,6 +530,15 @@ function Header(props: {
             </button>
           )}
         </>
+      )}
+      {project && !props.isSearch && (
+        <select aria-label="Sort links" title="Sort links" value={props.sort} onChange={(e) => props.onSort(e.target.value as LinkSort)}>
+          {(Object.keys(SORT_LABELS) as LinkSort[]).map((k) => (
+            <option key={k} value={k}>
+              {SORT_LABELS[k]}
+            </option>
+          ))}
+        </select>
       )}
       {project && !props.isSearch && (
         <button
@@ -455,8 +581,34 @@ function Row(props: {
   onDragEnd: () => void;
   /** Present only for live tabs: shows a × that closes the tab. */
   onClose?: () => void;
+  /** Present in a project: shows the done tick. */
+  onToggleDone?: () => void;
+  /** Drop indicator while reordering. */
+  dropEdge: 'before' | 'after' | null;
+  onRowDragOver?: (e: DragEvent) => void;
+  onRowDrop?: (e: DragEvent) => void;
 }) {
   const { item, mode } = props;
+  const doneButton = props.onToggleDone && (
+    <button
+      className={`done-tick ${item.done ? 'is-done' : ''}`}
+      role="checkbox"
+      aria-checked={!!item.done}
+      aria-label={`${item.done ? 'Mark as not done' : 'Mark as done'}: ${item.title}`}
+      title={item.done ? 'Done. Click to mark as not done' : 'Mark as done'}
+      draggable={false}
+      onClick={(e) => {
+        e.stopPropagation();
+        props.onToggleDone?.();
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      ✓
+    </button>
+  );
+  const dropClass = props.dropEdge ? `drop-${props.dropEdge}` : '';
+  const doneClass = item.done ? 'is-done-row' : '';
   const closeButton = props.onClose && (
     <button
       className="close-tab"
@@ -481,12 +633,14 @@ function Row(props: {
     onContextMenu: props.onContextMenu,
     onDragStart: props.onDragStart,
     onDragEnd: props.onDragEnd,
+    onDragOver: props.onRowDragOver,
+    onDrop: props.onRowDrop,
     title: item.url,
   };
 
   if (mode === 'preview') {
     return (
-      <li className={`card ${props.selected ? 'selected' : ''}`} {...common}>
+      <li className={`card ${props.selected ? 'selected' : ''} ${dropClass} ${doneClass}`} {...common}>
         <div className="thumb">
           {thumb ? <img src={thumb} alt="" draggable={false} /> : <Favicon url={item.url} size={32} />}
           {props.open && !closeButton && <span className="dot open-dot" title="Open in a tab" />}
@@ -494,6 +648,7 @@ function Row(props: {
         </div>
         <div className="card-body">
           <div className="row">
+            {doneButton}
             <Favicon url={item.url} />
             <span className="grow ellipsis card-title">{item.title}</span>
           </div>
@@ -513,8 +668,9 @@ function Row(props: {
   }
 
   return (
-    <li className={`list-item link-row ${props.selected ? 'selected' : ''}`} {...common}>
+    <li className={`list-item link-row ${props.selected ? 'selected' : ''} ${dropClass} ${doneClass}`} {...common}>
       <span className={`dot ${props.open ? '' : 'off'}`} title={props.open ? 'Open in a tab' : undefined} />
+      {doneButton}
       <Favicon url={item.url} />
       <span className="grow ellipsis">{item.title}</span>
       {props.listChips && props.chips.length > 0 && (

@@ -253,3 +253,27 @@ code { background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
 }
 .window-heading:hover { background: var(--surface-2); color: var(--text); }
 .window-row { user-select: none; }
+
+/* Ordering and done */
+.link-row.drop-before, .card.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.link-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.card.drop-before { box-shadow: -3px 0 0 var(--accent); }
+.card.drop-after { box-shadow: 3px 0 0 var(--accent); }
+.done-tick {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1.5px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: transparent;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+.done-tick:hover { border-color: var(--ok); color: var(--ok); }
+.done-tick.is-done { background: var(--ok); border-color: var(--ok); color: #fff; }
+.is-done-row .grow, .is-done-row .card-title { color: var(--muted); text-decoration: line-through; }
+.done-section { margin-top: 14px; }
+.pane-header select { padding: 5px 8px; }

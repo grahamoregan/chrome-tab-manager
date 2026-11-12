@@ -397,7 +397,9 @@ export function App() {
                       }
                     />
                     <span className="grow ellipsis">{p.name}</span>
-                    <span className="badge">{p.linkIds.length}</span>
+                    <span className="badge" title={`${p.linkIds.length - (p.doneIds?.length ?? 0)} to go · ${p.doneIds?.length ?? 0} done`}>
+                      {p.linkIds.length - (p.doneIds?.length ?? 0)}
+                    </span>
                   </div>
                 </li>
               );

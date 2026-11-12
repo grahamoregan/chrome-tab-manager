@@ -1,5 +1,5 @@
 import { matchesQuery, queryWords } from './search';
-import { normaliseUrl } from './url';
+import { siteOf, normaliseUrl } from './url';
 
 /** One saved link, shared by every project that contains it. `id` is the normalised URL. */
 export interface Link {
@@ -15,9 +15,17 @@ export interface Project {
   name: string;
   createdAt: number;
   updatedAt: number;
+  /** Manual order: new links are appended. */
   linkIds: string[];
   viewMode: 'list' | 'preview';
+  sort?: LinkSort;
+  /** Links marked done in this project. */
+  doneIds?: string[];
+  /** When each link was added to this project. */
+  addedAt?: Record<string, number>;
 }
+
+export type LinkSort = 'manual' | 'newest' | 'oldest' | 'title' | 'site';
 
 export interface Data {
   version: 1;
@@ -87,7 +95,15 @@ export function createProject(
 ): { data: Data; projectId: string } {
   const next = clone(data);
   const linkIds = upsertLinks(next, links, now);
-  next.projects[id] = { id, name: name.trim() || 'Untitled project', createdAt: now, updatedAt: now, linkIds, viewMode: 'list' };
+  next.projects[id] = {
+    id,
+    name: name.trim() || 'Untitled project',
+    createdAt: now,
+    updatedAt: now,
+    linkIds,
+    viewMode: 'list',
+    addedAt: Object.fromEntries(linkIds.map((l) => [l, now])),
+  };
   return { data: next, projectId: id };
 }
 
@@ -112,7 +128,7 @@ export function addLinks(data: Data, projectId: string, links: LinkInput[], now 
   const next = clone(data);
   const p = next.projects[projectId];
   if (!p) return data;
-  for (const id of upsertLinks(next, links, now)) if (!p.linkIds.includes(id)) p.linkIds.push(id);
+  for (const id of upsertLinks(next, links, now)) appendLink(p, id, now);
   touch(p, now);
   return next;
 }
@@ -121,7 +137,7 @@ export function copyLinks(data: Data, linkIds: string[], toProjectId: string, no
   const next = clone(data);
   const to = next.projects[toProjectId];
   if (!to) return data;
-  for (const id of linkIds) if (next.links[id] && !to.linkIds.includes(id)) to.linkIds.push(id);
+  for (const id of linkIds) if (next.links[id]) appendLink(to, id, now);
   touch(to, now);
   return next;
 }
@@ -132,8 +148,118 @@ export function removeLinks(data: Data, projectId: string, linkIds: string[], no
   if (!p) return data;
   const drop = new Set(linkIds);
   p.linkIds = p.linkIds.filter((id) => !drop.has(id));
+  if (p.doneIds) p.doneIds = p.doneIds.filter((id) => !drop.has(id));
+  if (p.addedAt) for (const id of drop) delete p.addedAt[id];
   touch(p, now);
   return collectGarbage(next);
+}
+
+function appendLink(p: Project, id: string, now: number): void {
+  if (p.linkIds.includes(id)) return;
+  p.linkIds.push(id);
+  (p.addedAt ??= {})[id] = now;
+}
+
+/**
+ * Moves `linkIds` as a block (keeping their relative order) so they sit just
+ * before `beforeId`, or at the end when `beforeId` is null. Sets the project to manual order.
+ */
+export function reorderLinks(data: Data, projectId: string, linkIds: string[], beforeId: string | null): Data {
+  const p = data.projects[projectId];
+  if (!p) return data;
+  const moving = new Set(linkIds);
+  if (beforeId !== null && moving.has(beforeId)) return data;
+  const block = p.linkIds.filter((id) => moving.has(id));
+  if (block.length === 0) return data;
+  const rest = p.linkIds.filter((id) => !moving.has(id));
+  const at = beforeId === null ? rest.length : rest.indexOf(beforeId);
+  if (at < 0) return data;
+  const next = clone(data);
+  const np = next.projects[projectId];
+  np.linkIds = [...rest.slice(0, at), ...block, ...rest.slice(at)];
+  np.sort = 'manual';
+  return next;
+}
+
+export function moveToTop(data: Data, projectId: string, linkIds: string[]): Data {
+  const first = data.projects[projectId]?.linkIds.find((id) => !linkIds.includes(id)) ?? null;
+  return first === null ? setSort(data, projectId, 'manual') : reorderLinks(data, projectId, linkIds, first);
+}
+
+export function moveToBottom(data: Data, projectId: string, linkIds: string[]): Data {
+  return reorderLinks(data, projectId, linkIds, null);
+}
+
+/**
+ * Nudges the selected links one place up (-1) or down (+1) in manual order,
+ * skipping over done links (which aren't shown in the main list).
+ */
+export function nudgeLinks(data: Data, projectId: string, linkIds: string[], dir: -1 | 1): Data {
+  const p = data.projects[projectId];
+  if (!p) return data;
+  const done = new Set(p.doneIds ?? []);
+  const visible = p.linkIds.filter((id) => !done.has(id));
+  const moving = new Set(linkIds);
+  const idx = visible.map((id, i) => (moving.has(id) ? i : -1)).filter((i) => i >= 0);
+  if (idx.length === 0) return data;
+  if (dir === -1) {
+    const above = visible[idx[0] - 1];
+    return above === undefined ? setSort(data, projectId, 'manual') : reorderLinks(data, projectId, linkIds, above);
+  }
+  const below = visible[idx[idx.length - 1] + 1];
+  if (below === undefined) return setSort(data, projectId, 'manual');
+  const rest = p.linkIds.filter((id) => !moving.has(id));
+  const afterBelow = rest[rest.indexOf(below) + 1] ?? null;
+  return reorderLinks(data, projectId, linkIds, afterBelow);
+}
+
+export function setSort(data: Data, projectId: string, sort: LinkSort): Data {
+  if (!data.projects[projectId] || (data.projects[projectId].sort ?? 'manual') === sort) return data;
+  const next = clone(data);
+  next.projects[projectId].sort = sort;
+  return next;
+}
+
+export function setDone(data: Data, projectId: string, linkIds: string[], done: boolean, now = Date.now()): Data {
+  const p = data.projects[projectId];
+  if (!p) return data;
+  const next = clone(data);
+  const np = next.projects[projectId];
+  const set = new Set(np.doneIds ?? []);
+  for (const id of linkIds) if (np.linkIds.includes(id)) (done ? set.add(id) : set.delete(id));
+  np.doneIds = np.linkIds.filter((id) => set.has(id));
+  touch(np, now);
+  return next;
+}
+
+/** When a link was added to a project (falls back to when it was first saved). */
+export function addedToProject(data: Data, p: Project, linkId: string): number {
+  return p.addedAt?.[linkId] ?? data.links[linkId]?.addedAt ?? 0;
+}
+
+/** The project's links split into to-go and done, each in the project's chosen sort. */
+export function orderedLinks(data: Data, p: Project): { active: Link[]; done: Link[] } {
+  const sort = p.sort ?? 'manual';
+  const links = p.linkIds.map((id) => data.links[id]).filter((l): l is Link => !!l);
+  const added = (l: Link) => addedToProject(data, p, l.id);
+  const byTitle = (a: Link, b: Link) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
+  const sorted =
+    sort === 'manual'
+      ? links
+      : [...links].sort((a, b) => {
+          switch (sort) {
+            case 'newest':
+              return added(b) - added(a);
+            case 'oldest':
+              return added(a) - added(b);
+            case 'title':
+              return byTitle(a, b);
+            case 'site':
+              return (siteOf(a.url) ?? '').localeCompare(siteOf(b.url) ?? '') || byTitle(a, b);
+          }
+        });
+  const done = new Set(p.doneIds ?? []);
+  return { active: sorted.filter((l) => !done.has(l.id)), done: sorted.filter((l) => done.has(l.id)) };
 }
 
 export function moveLinks(

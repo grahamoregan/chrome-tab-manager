@@ -16,7 +16,11 @@ Tab-changing actions run in the background service worker (via messages), so the
 
 ## Data model
 - **Link**: one per normalised URL — `{ id (= normalised URL), url, title, favIconUrl, addedAt }`.
-- **Project**: `{ id, name, createdAt, updatedAt, linkIds[], viewMode: 'list'|'preview' }`.
+- **Project**: `{ id, name, createdAt, updatedAt, linkIds[], viewMode: 'list'|'preview', sort?, doneIds?, addedAt? }`.
+  - `linkIds` order **is** the manual order; new links are appended (bottom).
+  - `sort`: `'manual'` (default) | `'newest'` | `'oldest'` | `'title'` | `'site'`.
+  - `doneIds`: links marked done in this project (done is per project).
+  - `addedAt`: when each link was added to *this* project (older data falls back to the link's first-saved time).
 - Many-to-many: a link may appear in several projects. Links no project uses are garbage collected.
 - Projects, links, settings, the undo entry and "Recently closed" (last 300) live in `chrome.storage.local`. They survive restarts and extension reloads, and are deleted only if the extension is removed.
 - Saved links are independent of tabs: closing a tab never changes a project.
@@ -79,6 +83,14 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 - Flat list sortable by name / recently changed.
 - **Right-click menus stay on screen.** The menu is moved left/up if it would go past the window edge. Submenus (Add/Copy/Move to project ▸) open to the right, or to the left when there isn't room, and are shifted up and scroll if the project list is taller than the space below.
 
+## Ordering and catching up within a project
+- **Manual order** (default): drag links up/down within the project (a line shows where they'll land; several selected links move together as a block). Right-click → **Move to top** / **Move to bottom**. **⌥↑ / ⌥↓** nudge the selection one place. Works in list and preview mode. Dropping onto a project in the sidebar still moves links between projects.
+- **Sort dropdown** in the project header: Manual · Newest added · Oldest added · Title · Site. Other sorts are views only and never change the manual order; drag-to-reorder only works in Manual. Moving to top/bottom or nudging from another sort switches the project to Manual. Remembered per project.
+- **Done**: a tick on each link (and right-click → Mark as done / Mark as not done). Done links leave the main list and collect in a collapsed **Done (n)** section at the bottom, in the same sort. Unticking puts a link back in its manual position.
+- The project's sidebar badge shows links still **to go** (not done); hover shows "3 to go · 5 done".
+- **Open project** opens only links that aren't done.
+- Moving a link to another project doesn't carry its done state; copying doesn't either.
+
 ## Search
 - The top-bar box is just **Search** (⌘F or `/` focuses it, Esc clears it). It searches titles and URLs; every word must match, in any order, ignoring case.
 - Results replace the main pane in two sections:
@@ -118,5 +130,5 @@ Proposed answers awaiting confirmation: a separate "Archives" sidebar section wh
 7. Manager-first (remove popup). ✅
 8. Right-click menus stay on screen; search covers open tabs. ✅
 9. All windows view, window filters (⌘/⇧-click), merge from selection. ✅
-10. Sorting within projects. ⏳ (design proposed)
+10. Ordering, sorting and done within projects. ✅
 11. Archive & close. ⏳ (after decisions)

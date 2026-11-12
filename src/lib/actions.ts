@@ -292,7 +292,13 @@ export async function openProject(projectId: string): Promise<number> {
   const data = await loadData();
   const p = data.projects[projectId];
   if (!p) return 0;
-  return openUrlsInNewWindow(p.linkIds.map((id) => data.links[id]?.url).filter((u): u is string => !!u));
+  const done = new Set(p.doneIds ?? []);
+  return openUrlsInNewWindow(
+    p.linkIds
+      .filter((id) => !done.has(id))
+      .map((id) => data.links[id]?.url)
+      .filter((u): u is string => !!u),
+  );
 }
 
 /** Focuses an open tab with this URL, or opens it in the last focused window. */
