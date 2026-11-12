@@ -17,6 +17,7 @@ import {
   type UndoEntry,
 } from './storage';
 import { toTabLike, type TabLike } from './tabs';
+import { planMerge } from './windows';
 import { isWebUrl, normaliseUrl } from './url';
 
 export const MANAGER_PATH = 'src/manager/index.html';
@@ -109,14 +110,68 @@ export async function undoLast(): Promise<string | null> {
   if (!entry) return null;
   await setUndo(null);
   if (entry.dataBefore) await saveData(entry.dataBefore);
-  if (entry.moves?.length) {
-    // Move back in reverse so indexes line up.
-    for (const m of [...entry.moves].reverse()) {
-      await chrome.tabs.move(m.tabId, { windowId: m.windowId, index: m.index }).catch(() => undefined);
-    }
-  }
+  if (entry.moves?.length) await moveBack(entry.moves);
   if (entry.closedTabs?.length) await reopenTabs(entry.closedTabs);
   return entry.label;
+}
+
+/**
+ * Returns moved tabs to their original windows and positions. A window that
+ * closed because all its tabs moved out is recreated from its first tab.
+ */
+async function moveBack(moves: TabMove[]): Promise<void> {
+  const open = new Set((await chrome.windows.getAll()).map((w) => w.id));
+  const byWindow = new Map<number, TabMove[]>();
+  for (const m of moves) byWindow.set(m.windowId, [...(byWindow.get(m.windowId) ?? []), m]);
+  for (const [windowId, list] of byWindow) {
+    list.sort((a, b) => a.index - b.index);
+    let target = windowId;
+    let rest = list;
+    if (!open.has(windowId)) {
+      const w = await chrome.windows.create({ tabId: list[0].tabId, focused: false }).catch(() => undefined);
+      if (w?.id === undefined) continue;
+      target = w.id;
+      rest = list.slice(1);
+    }
+    // Ascending order so each tab lands at its original index.
+    for (const m of rest) {
+      await chrome.tabs.move(m.tabId, { windowId: target, index: m.index }).catch(() => undefined);
+    }
+    for (const m of list) if (m.pinned) await chrome.tabs.update(m.tabId, { pinned: true }).catch(() => undefined);
+  }
+}
+
+/** Moves every tab of the selected windows into the selected window with the most tabs. */
+export async function mergeWindows(windowIds: number[], currentWindowId?: number): Promise<{ moved: number; targetWindowId: number } | null> {
+  const plan = planMerge(await getTabs(), windowIds, currentWindowId);
+  if (!plan) return null;
+  const moves: TabMove[] = plan.moving.map((t) => ({ tabId: t.id, windowId: t.windowId, index: t.index ?? 0, pinned: t.pinned }));
+  for (const source of plan.sourceWindowIds) {
+    // Whole groups first so they keep their title and colour.
+    for (const g of await chrome.tabGroups.query({ windowId: source })) {
+      await chrome.tabGroups.move(g.id, { windowId: plan.targetWindowId, index: -1 });
+    }
+    const remaining = (await chrome.tabs.query({ windowId: source })).sort((a, b) => a.index - b.index);
+    const pinned = remaining.filter((t) => t.pinned);
+    const unpinned = remaining.filter((t) => !t.pinned);
+    if (pinned.length) {
+      // Pinned tabs go after the target's existing pinned tabs.
+      const targetPinned = (await chrome.tabs.query({ windowId: plan.targetWindowId, pinned: true })).length;
+      await chrome.tabs.move(pinned.map((t) => t.id!) as [number, ...number[]], { windowId: plan.targetWindowId, index: targetPinned });
+      for (const t of pinned) await chrome.tabs.update(t.id!, { pinned: true });
+    }
+    if (unpinned.length) {
+      await chrome.tabs.move(unpinned.map((t) => t.id!) as [number, ...number[]], { windowId: plan.targetWindowId, index: -1 });
+    }
+  }
+  const n = plan.sourceWindowIds.length + 1;
+  await setUndo({ label: `Merged ${n} windows (${plural(moves.length, 'tab')} moved)`, at: Date.now(), moves });
+  await chrome.windows.update(plan.targetWindowId, { focused: true }).catch(() => undefined);
+  return { moved: moves.length, targetWindowId: plan.targetWindowId };
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${n === 1 ? word : `${word}s`}`;
 }
 
 /** Pulls every tab of `site` into the window with the most of them. Returns the moves made. */

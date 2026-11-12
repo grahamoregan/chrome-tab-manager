@@ -2,6 +2,7 @@ import {
   closeTabs,
   focusOrOpen,
   gatherSite,
+  mergeWindows,
   openManager,
   openProject,
   openUrlsInNewWindow,
@@ -27,6 +28,8 @@ async function handle(req: Request): Promise<unknown> {
       return gatherSite(req.site, req.currentWindowId);
     case 'tidyAll':
       return tidyAll(req.currentWindowId);
+    case 'mergeWindows':
+      return mergeWindows(req.windowIds, req.currentWindowId);
     case 'saveEverything':
       return saveEverything(req.perWindow);
     case 'saveTabsToProject':

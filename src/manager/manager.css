@@ -201,3 +201,11 @@ code { background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 .thumb .close-tab:hover { background: var(--danger-soft); }
+
+.merge-bar {
+  margin: 6px 0;
+  padding: 8px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+}
+.merge-bar p { margin: 0 0 6px; }

@@ -16,6 +16,7 @@ import {
 import { saveSettings, updateData } from '../lib/storage';
 import { summariseSites } from '../lib/sites';
 import { isWebUrl } from '../lib/url';
+import { planMerge } from '../lib/windows';
 import { UndoBar, plural } from '../ui/components';
 import { useData, useLiveTabs, useSettings, useUndo } from '../ui/hooks';
 import { ContextMenu, type MenuState } from './ContextMenu';
@@ -41,6 +42,8 @@ export function App() {
   const [pane, setPane] = useState<Pane>({ kind: 'none' });
   const [query, setQuery] = useState('');
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [checkedWindows, setCheckedWindows] = useState<Set<number>>(new Set());
+  const [merging, setMerging] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [newName, setNewName] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -50,6 +53,31 @@ export function App() {
   const projects = useMemo(() => sortedProjects(data, settings.projectSort), [data, settings.projectSort]);
   const sorted = useMemo(() => sortedLinkIds(data), [data]);
   const closeMenu = useCallback(() => setMenu(null), []);
+
+  // Windows ticked for merging that are still open, and what merging them would do.
+  const mergeIds = live.windowIds.filter((id) => checkedWindows.has(id));
+  const mergePlan = useMemo(
+    () => (mergeIds.length >= 2 ? planMerge(live.tabs, mergeIds, live.currentWindowId) : null),
+    [live.tabs, live.currentWindowId, mergeIds.join(',')],
+  );
+  const windowNumber = (id: number) => live.windowIds.indexOf(id) + 1;
+
+  const merge = async () => {
+    if (!mergePlan) return;
+    setMerging(true);
+    try {
+      const r = (await request({ type: 'mergeWindows', windowIds: mergeIds, currentWindowId: live.currentWindowId })) as {
+        targetWindowId: number;
+      } | null;
+      setCheckedWindows(new Set());
+      if (r) {
+        setQuery('');
+        setPane({ kind: 'window', id: r.targetWindowId });
+      }
+    } finally {
+      setMerging(false);
+    }
+  };
 
   // Fall back to the first project if the selected one disappears.
   const activePane: Pane =
@@ -144,6 +172,21 @@ export function App() {
                       setPane({ kind: 'window', id });
                     }}
                   >
+                    <input
+                      type="checkbox"
+                      aria-label={`Select Window ${i + 1} to merge`}
+                      title="Select to merge windows"
+                      checked={checkedWindows.has(id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) =>
+                        setCheckedWindows((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(id);
+                          else next.delete(id);
+                          return next;
+                        })
+                      }
+                    />
                     <span className="grow ellipsis">
                       Window {i + 1}
                       {id === live.currentWindowId ? ' (this)' : ''}
@@ -157,7 +200,24 @@ export function App() {
               );
             })}
           </ul>
-          <p className="hint muted">Showing unsorted tabs: ones not in any project yet.</p>
+          {mergeIds.length === 1 && <p className="hint muted">Tick another window to merge them.</p>}
+          {mergePlan && (
+            <div className="merge-bar">
+              <p>
+                Merge {mergeIds.length} windows ({plural(mergePlan.moving.length, 'tab')} moving) into{' '}
+                <strong>Window {windowNumber(mergePlan.targetWindowId)}</strong>, the biggest.
+              </p>
+              <div className="row">
+                <button className="btn small" onClick={() => setCheckedWindows(new Set())}>
+                  Clear
+                </button>
+                <button className="btn small primary" disabled={merging} onClick={() => void merge()}>
+                  {merging ? 'Merging…' : 'Merge'}
+                </button>
+              </div>
+            </div>
+          )}
+          <p className="hint muted">Showing unsorted tabs: ones not in any project yet. Tick windows to merge them.</p>
         </section>
 
         <section className="projects">

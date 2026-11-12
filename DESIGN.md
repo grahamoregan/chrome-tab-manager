@@ -40,6 +40,16 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 - A tab is stale if it matches a rule and `now - lastAccessed >= threshold` (default 30 min, configurable). Deep links never match.
 - Manual only. Settings has a "test a URL" box.
 
+## Merge windows
+- In the manager's "Open tabs" list each window has a checkbox (same pattern as deleting projects). With two or more ticked, a bar appears: "Merge 3 windows (52 tabs) into Window 2" → **Merge**.
+- Target = the selected window with the most tabs (all tabs, sorted or not); ties → the current window, then the lowest window number.
+- **All** tabs move, including pinned tabs (they stay pinned) and sorted tabs. Tab groups move as whole groups, keeping their name and colour. The emptied windows close automatically.
+- Undo moves the tabs back into their original windows, recreating any window that has closed. Tab groups aren't restored by Undo.
+- Clicking a window name still opens its tab list; ticking only selects it for merging.
+
+## Archive tabs (planned — details to be agreed)
+- Close all tabs but save their details under a dated name such as "Unsorted – 2026-11-12", without them having to go into a project.
+
 ## Safety
 Every destructive action shows a preview, then offers Undo. Closed tabs are recorded in a "Recently closed by Tab Sort" list (capped) and can be reopened.
 

@@ -29,6 +29,8 @@ export interface TabMove {
   tabId: number;
   windowId: number;
   index: number;
+  /** Chrome unpins tabs that move between windows, so pinned state is restored explicitly. */
+  pinned?: boolean;
 }
 
 /** The single most recent undoable action. */
