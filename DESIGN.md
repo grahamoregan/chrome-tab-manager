@@ -19,7 +19,7 @@ Tab-changing actions run in the background service worker (via messages), so the
 - **Project**: `{ id, name, createdAt, updatedAt, linkIds[], viewMode: 'list'|'preview', sort?, doneIds?, addedAt? }`.
   - `linkIds` order **is** the manual order; new links are appended (bottom).
   - `sort`: `{ by: 'manual'|'title'|'site'|'added', dir: 'asc'|'desc' }` (default manual). Older string values (`'newest'`, `'title'`…) are still read.
-  - `doneIds`: links marked **read** in this project (read is per project; called "done" in code).
+  - `doneIds`: links **archived** in this project (per project; called "done" in code).
   - `addedAt`: when each link was added to *this* project (older data falls back to the link's first-saved time).
 - Many-to-many: a link may appear in several projects. Links no project uses are garbage collected.
 - Projects, links, settings, the undo entry and "Recently closed" (last 300) live in `chrome.storage.local`. They survive restarts and extension reloads, and are deleted only if the extension is removed.
@@ -85,12 +85,13 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 
 ## Ordering and catching up within a project
 - **Manual order** (default): drag links up/down within the project (a line shows where they'll land; several selected links move together as a block). Right-click → **Move to top** / **Move to bottom**. **⌥↑ / ⌥↓** nudge the selection one place. Works in list and preview mode. Dropping onto a project in the sidebar still moves links between projects.
-- **Column headers** (list mode): projects show **Read · Title · Site · Added**; tab lists show **Title · Site · Last viewed** (when the tab was last looked at). The headers make clear what the round tick is for.
-- **Sorting by column**: click a column name to sort by it (text A→Z, dates newest first); click again to reverse; a third click returns to manual order (projects) or Chrome's tab order (tab lists). An arrow shows the active column and direction. Sorts are views only and never change the manual order; drag-to-reorder only works in manual order. Moving to top/bottom or nudging switches the project back to manual. A project remembers its sort; tab lists start in tab order each visit. With several windows shown, sorting applies within each window's group. Preview mode has no columns, so a sort dropdown in the header offers the same choices. Search results aren't sortable.
-- **Read**: a round tick on each link (and right-click → Mark as read / Mark as unread). Read links leave the main list and collect in a collapsed **Read (n)** section at the bottom, in the same sort. Unticking puts a link back in its manual position.
-- The project's sidebar badge shows links still **to read**; hover shows "3 to read · 5 read".
-- **Open project** opens only unread links.
-- Moving a link to another project doesn't carry its read state; copying doesn't either.
+- **Column headers** (list mode): projects show **Archive · Title · Site · Added**; tab lists show **Title · Site · Last viewed** (when the tab was last looked at). The headers make clear what the round tick is for.
+- **Sorting by column**: click a column name to sort by it (text A→Z, dates newest first); click again to reverse; a third click, or the **Remove sort** link beside the Title column, returns to manual order (projects) or Chrome's tab order (tab lists). An arrow shows the active column and direction. Sorts are views only and never change the manual order; drag-to-reorder only works in manual order. Moving to top/bottom or nudging switches the project back to manual. A project remembers its sort; tab lists start in tab order each visit. With several windows shown, sorting applies within each window's group. Preview mode has no columns, so a sort dropdown in the header offers the same choices. Search results aren't sortable.
+- **Archive**: a round tick on each link, with clear space before the favicon (and right-click → Archive / Unarchive). Archived links leave the main list and collect in a collapsed **Archived (n)** section at the bottom, in the same sort. Unticking puts a link back in its manual position.
+- The project's sidebar badge shows links still **active** (not archived); hover shows "3 active · 5 archived".
+- **Open project** opens only active links.
+- Moving a link to another project doesn't carry its archived state; copying doesn't either.
+- (Earlier wording: "done", then "read". Not to be confused with the planned "archive & close" below, which is about closing open tabs.)
 
 ## Search
 - The top-bar box is just **Search** (⌘F or `/` focuses it, Esc clears it). It searches titles and URLs; every word must match, in any order, ignoring case.
@@ -133,4 +134,5 @@ Proposed answers awaiting confirmation: a separate "Archives" sidebar section wh
 9. All windows view, window filters (⌘/⇧-click), merge from selection. ✅
 10. Ordering, sorting and done within projects. ✅
 11. Column headers, column sorting, "read" wording; save & close skips saved tabs. ✅
-12. Archive & close. ⏳ (after decisions)
+12. "Read" renamed "Archive"; "Remove sort"; more space after the tick. ✅
+13. Archive & close. ⏳ (after decisions; may be unnecessary now)

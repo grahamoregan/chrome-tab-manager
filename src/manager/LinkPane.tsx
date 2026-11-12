@@ -41,7 +41,7 @@ interface Item {
   addedAt?: number;
   tabId?: number;
   windowId?: number;
-  /** Marked read in the current project ("done" in the data). */
+  /** Archived in the current project ("done" in the data). */
   done?: boolean;
   /** When an open tab was last looked at. */
   viewedAt?: number;
@@ -244,11 +244,11 @@ export function LinkPane(props: {
           0,
           'separator',
           {
-            label: allDone ? 'Mark as unread' : 'Mark as read',
+            label: allDone ? 'Unarchive' : 'Archive',
             onClick: () =>
               void updateData(
                 (d) => setDone(d, project.id, linkIdsOf(list), !allDone),
-                `Marked ${plural(n, 'link')} as ${allDone ? 'unread' : 'read'}`,
+                `${allDone ? 'Unarchived' : 'Archived'} ${plural(n, 'link')}`,
               ),
           },
           { label: 'Move to top', disabled: notDone.length === 0, onClick: () => void updateData((d) => moveToTop(d, project.id, notDone), `Moved ${plural(notDone.length, 'link')} to the top`) },
@@ -371,11 +371,11 @@ export function LinkPane(props: {
         <>
           {ordered.active.length > 0 && columnHeader()}
           {renderList(items.filter((i) => !i.done))}
-          {ordered.active.length === 0 && <p className="muted empty">All caught up: everything in this project is read.</p>}
+          {ordered.active.length === 0 && <p className="muted empty">All caught up: everything in this project is archived.</p>}
           {ordered.done.length > 0 && (
             <section className="done-section">
               <button className="results-heading window-heading" aria-expanded={showDone} onClick={() => setShowDone((v) => !v)}>
-                {showDone ? '▾' : '▸'} Read ({ordered.done.length})
+                {showDone ? '▾' : '▸'} Archived ({ordered.done.length})
               </button>
               {showDone && renderList(items.filter((i) => i.done))}
             </section>
@@ -401,7 +401,7 @@ export function LinkPane(props: {
         <button
           className={`col ${className} ${active ? 'active' : ''}`}
           aria-sort={active ? (sortSpec.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-          title={`Sort by ${COLUMN_LABELS[col].toLowerCase()}${active ? ' (click again to ' + (nextSort(sortSpec, col).by === 'manual' ? `go back to ${project ? 'manual' : 'tab'} order)` : 'reverse)') : ''}`}
+          title={`Sort by ${COLUMN_LABELS[col].toLowerCase()}${active ? ' (click again to ' + (nextSort(sortSpec, col).by === 'manual' ? 'remove the sort)' : 'reverse)') : ''}`}
           onClick={() => changeSort(nextSort(sortSpec, col))}
         >
           {COLUMN_LABELS[col]} <span className="arrow">{arrow}</span>
@@ -412,16 +412,16 @@ export function LinkPane(props: {
       <div className="col-head" role="row">
         <span className="col-dot" />
         {project && (
-          <span className="col col-read" title="Tick links as you read them. Read links move to the Read section at the bottom.">
-            Read
+          <span className="col col-read" title="Tick a link to archive it. Archived links move to the Archived section at the bottom.">
+            Archive
           </span>
         )}
         <span className="col-fav" />
         <span className="col-title-wrap">
           {cell('title', 'col-title')}
           {sortSpec.by !== 'manual' && (
-            <button className="col col-reset" onClick={() => changeSort(MANUAL)}>
-              Back to {project ? 'manual' : 'tab'} order
+            <button className="col col-reset" title={`Go back to ${project ? 'your manual' : "Chrome's tab"} order`} onClick={() => changeSort(MANUAL)}>
+              Remove sort
             </button>
           )}
         </span>
@@ -497,7 +497,7 @@ export function LinkPane(props: {
               onRowDrop={reorderable ? (e) => rowDrop(e, item) : undefined}
               onToggleDone={
                 project && !isSearch
-                  ? () => void updateData((d) => setDone(d, project.id, [item.linkId], !item.done), `Marked “${item.title}” as ${item.done ? 'unread' : 'read'}`)
+                  ? () => void updateData((d) => setDone(d, project.id, [item.linkId], !item.done), `${item.done ? 'Unarchived' : 'Archived'} “${item.title}”`)
                   : undefined
               }
             />
@@ -582,7 +582,7 @@ function Header(props: {
               ? plural(props.windowTabCount, 'tab')
               : `${props.count} unsorted of ${plural(props.windowTabCount, 'tab')}`
             : props.project && props.doneCount
-              ? `${props.toGo} to read · ${props.doneCount} read`
+              ? `${props.toGo} active · ${props.doneCount} archived`
               : plural(props.count, 'link')}
         </span>
       </div>
@@ -680,8 +680,8 @@ function Row(props: {
       className={`done-tick ${item.done ? 'is-done' : ''}`}
       role="checkbox"
       aria-checked={!!item.done}
-      aria-label={`${item.done ? 'Mark as unread' : 'Mark as read'}: ${item.title}`}
-      title={item.done ? 'Read. Click to mark as unread' : 'Mark as read'}
+      aria-label={`${item.done ? 'Unarchive' : 'Archive'}: ${item.title}`}
+      title={item.done ? 'Archived. Click to unarchive' : 'Archive'}
       draggable={false}
       onClick={(e) => {
         e.stopPropagation();

@@ -261,6 +261,7 @@ code { background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
 .card.drop-after { box-shadow: 3px 0 0 var(--accent); }
 .done-tick {
   flex: none;
+  margin: 0 8px 0 6px;
   width: 18px;
   height: 18px;
   padding: 0;
@@ -294,7 +295,7 @@ code { background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
 }
 .col-dot { width: 7px; flex: none; }
 .col-fav { width: 16px; flex: none; }
-.col-read { width: 18px; flex: none; display: flex; justify-content: center; overflow: visible; white-space: nowrap; }
+.col-read { width: 32px; flex: none; display: flex; justify-content: center; overflow: visible; white-space: nowrap; }
 .col-title-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
 .col-site { width: 180px; flex: none; display: flex; justify-content: flex-end; }
 .col-date { width: 110px; flex: none; display: flex; justify-content: flex-end; }
