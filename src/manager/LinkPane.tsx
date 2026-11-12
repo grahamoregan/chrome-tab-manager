@@ -115,6 +115,12 @@ export function LinkPane(props: {
     return () => document.removeEventListener('keydown', onKey);
   });
 
+  const closeItems = (list: Item[]) => {
+    const tabIds = list.map((i) => i.tabId).filter((id): id is number => id !== undefined);
+    if (tabIds.length === 0) return;
+    void request({ type: 'closeTabs', tabIds, reason: 'Closed from manager', label: `Closed ${plural(tabIds.length, 'tab')}` });
+  };
+
   const projectSubmenu = (exclude: string | undefined, fn: (p: Project) => void): MenuItem[] =>
     projects.filter((p) => p.id !== exclude).map((p) => ({ label: p.name, onClick: () => fn(p) }));
 
@@ -132,12 +138,7 @@ export function LinkPane(props: {
         { label: 'Add to project', submenu: projectSubmenu(undefined, (p) => void updateData((d) => addLinks(d, p.id, inputsOf(list)), `Added ${plural(n, 'link')} to ${p.name}`)) },
         { label: 'New project from selection…', onClick: () => props.onNewProject(list[0].title, inputsOf(list)) },
         'separator',
-        {
-          label: n === 1 ? 'Close tab' : `Close ${n} tabs`,
-          danger: true,
-          onClick: () =>
-            void request({ type: 'closeTabs', tabIds: list.map((i) => i.tabId!).filter((id) => id !== undefined), reason: 'Closed from manager', label: `Closed ${plural(n, 'tab')}` }),
-        },
+        { label: n === 1 ? 'Close tab' : `Close ${n} tabs`, danger: true, onClick: () => closeItems(list) },
       );
     } else {
       items.push(
@@ -229,6 +230,7 @@ export function LinkPane(props: {
               onContextMenu={(e) => onContextMenu(e, item.key)}
               onDragStart={(e) => onDragStart(e, item.key)}
               onDragEnd={props.onDragEnd}
+              onClose={item.tabId !== undefined && !isSearch ? () => closeItems([item]) : undefined}
             />
           ))}
         </ul>
@@ -355,8 +357,26 @@ function Row(props: {
   onContextMenu: (e: MouseEvent) => void;
   onDragStart: (e: DragEvent) => void;
   onDragEnd: () => void;
+  /** Present only for live tabs: shows a × that closes the tab. */
+  onClose?: () => void;
 }) {
   const { item, mode } = props;
+  const closeButton = props.onClose && (
+    <button
+      className="close-tab"
+      aria-label={`Close tab: ${item.title}`}
+      title="Close tab"
+      draggable={false}
+      onClick={(e) => {
+        e.stopPropagation();
+        props.onClose?.();
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      ×
+    </button>
+  );
   const thumb = useThumbnail(item.linkId, mode === 'preview');
   const common = {
     draggable: true,
@@ -373,7 +393,8 @@ function Row(props: {
       <li className={`card ${props.selected ? 'selected' : ''}`} {...common}>
         <div className="thumb">
           {thumb ? <img src={thumb} alt="" draggable={false} /> : <Favicon url={item.url} size={32} />}
-          {props.open && <span className="dot open-dot" title="Open in a tab" />}
+          {props.open && !closeButton && <span className="dot open-dot" title="Open in a tab" />}
+          {closeButton}
         </div>
         <div className="card-body">
           <div className="row">
@@ -411,6 +432,7 @@ function Row(props: {
       )}
       <Host url={item.url} />
       {item.addedAt !== undefined && <span className="added muted">{ago(item.addedAt)}</span>}
+      {closeButton}
     </li>
   );
 }

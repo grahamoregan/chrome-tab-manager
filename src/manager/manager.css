@@ -177,3 +177,27 @@ code { background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
 
 .toggle { color: var(--muted); cursor: pointer; }
 .list-chips { flex: none; max-width: 40%; overflow: hidden; flex-wrap: nowrap; }
+
+.close-tab {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.55;
+}
+.link-row:hover .close-tab, .card:hover .close-tab, .close-tab:focus-visible { opacity: 1; }
+.close-tab:hover { background: var(--danger-soft); color: var(--danger); }
+.thumb .close-tab {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.thumb .close-tab:hover { background: var(--danger-soft); }

@@ -53,6 +53,7 @@ Every destructive action shows a preview, then offers Undo. Closed tabs are reco
   - When every tab in a window is sorted, the pane says so instead of looking empty.
   - "New project from this window" uses the tabs currently listed (unsorted only, unless the toggle is on).
   - The popup's window stats still count all tabs.
+  - Each tab in a window list has a **×** at the right-hand end of its row (top-right corner of a preview card) that closes that one tab, with Undo and a "Recently closed" entry like every other close. It doesn't change the selection or start a drag. Project link lists have no × (removing a link from a project is a different action).
 - Save everything & close: single project "Saved session – <date time>" (option: one per window), deduped, then closes all tabs except the manager.
 - Open project: new window, skip already-open links, confirm if > 20, tabs created discarded (lazy).
 - Delete projects (multi-select): never closes tabs; Undo available.
