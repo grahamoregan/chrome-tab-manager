@@ -198,14 +198,6 @@ code { background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
 }
 .thumb .close-tab:hover { background: var(--danger-soft); }
 
-.merge-bar {
-  margin: 6px 0;
-  padding: 8px;
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-}
-.merge-bar p { margin: 0 0 6px; }
-
 .quick-actions { display: flex; gap: 6px; }
 .btn.quick { display: inline-flex; align-items: center; gap: 6px; }
 .btn.quick.has-work .badge { background: var(--accent); color: #fff; }
@@ -247,3 +239,17 @@ code { background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
 
 .topbar .undo-bar { flex: 0 1 auto; min-width: 0; }
 .topbar .undo-bar > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; max-width: 260px; }
+
+.window-heading {
+  display: block;
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  margin-left: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+.window-heading:hover { background: var(--surface-2); color: var(--text); }
+.window-row { user-select: none; }

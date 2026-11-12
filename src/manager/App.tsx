@@ -26,10 +26,13 @@ import { SettingsPane } from './SettingsPane';
 
 export type Pane =
   | { kind: 'project'; id: string }
-  | { kind: 'window'; id: number }
+  /** Open tabs; an empty windowIds means All windows. */
+  | { kind: 'tabs'; windowIds: number[] }
   | { kind: 'settings' }
   | { kind: 'review'; review: ReviewKind }
   | { kind: 'none' };
+
+export const ALL_WINDOWS: Pane = { kind: 'tabs', windowIds: [] };
 
 export type DragPayload =
   | { source: 'project'; projectId: string; linkIds: string[] }
@@ -41,17 +44,17 @@ export function App() {
   const live = useLiveTabs();
   const undo = useUndo();
 
-  const [pane, setPane] = useState<Pane>({ kind: 'none' });
+  const [pane, setPane] = useState<Pane>(ALL_WINDOWS);
   const [query, setQuery] = useState('');
   const [checked, setChecked] = useState<Set<string>>(new Set());
-  const [checkedWindows, setCheckedWindows] = useState<Set<number>>(new Set());
   const [merging, setMerging] = useState(false);
+  const windowAnchor = useRef<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [newName, setNewName] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const drag = useRef<DragPayload | null>(null);
-  const returnPane = useRef<Pane>({ kind: 'none' });
+  const returnPane = useRef<Pane>(ALL_WINDOWS);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // ⌘F / Ctrl+F or "/" focuses search (unless already typing somewhere).
@@ -80,12 +83,43 @@ export function App() {
   const sorted = useMemo(() => sortedLinkIds(data), [data]);
   const closeMenu = useCallback(() => setMenu(null), []);
 
-  // Windows ticked for merging that are still open, and what merging them would do.
-  const mergeIds = live.windowIds.filter((id) => checkedWindows.has(id));
+  // Resolve the requested pane against current data: deleted projects and closed windows fall back to All windows.
+  const activePane: Pane =
+    pane.kind === 'project' && !data.projects[pane.id]
+      ? ALL_WINDOWS
+      : pane.kind === 'tabs' && live.loaded
+        ? { kind: 'tabs', windowIds: pane.windowIds.filter((id) => live.windowIds.includes(id)) }
+        : pane.kind === 'none'
+          ? ALL_WINDOWS
+          : pane;
+  const selectedWindows = activePane.kind === 'tabs' && !query ? activePane.windowIds : [];
+  const showingTabs = activePane.kind === 'tabs' && !query;
+
+  // Two or more selected windows can be merged.
+  const mergeIds = selectedWindows.length >= 2 ? selectedWindows : [];
   const mergePlan = useMemo(
     () => (mergeIds.length >= 2 ? planMerge(live.tabs, mergeIds, live.currentWindowId) : null),
     [live.tabs, live.currentWindowId, mergeIds.join(',')],
   );
+
+  /** Click selects one window (again → All windows); ⌘/Ctrl toggles; ⇧ selects a range. */
+  const clickWindow = (id: number, e: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean }) => {
+    setQuery('');
+    const current = activePane.kind === 'tabs' ? activePane.windowIds : [];
+    let next: number[];
+    if (e.shiftKey && windowAnchor.current !== null && live.windowIds.includes(windowAnchor.current)) {
+      const a = live.windowIds.indexOf(windowAnchor.current);
+      const b = live.windowIds.indexOf(id);
+      next = live.windowIds.slice(Math.min(a, b), Math.max(a, b) + 1);
+    } else if (e.metaKey || e.ctrlKey) {
+      next = current.includes(id) ? current.filter((w) => w !== id) : [...current, id];
+      windowAnchor.current = id;
+    } else {
+      next = current.length === 1 && current[0] === id && activePane.kind === 'tabs' ? [] : [id];
+      windowAnchor.current = id;
+    }
+    setPane({ kind: 'tabs', windowIds: live.windowIds.filter((w) => next.includes(w)) });
+  };
   const windowNumber = (id: number) => live.windowIds.indexOf(id) + 1;
   const windowLabel = (id: number) => `Window ${windowNumber(id)}`;
 
@@ -104,27 +138,15 @@ export function App() {
       const r = (await request({ type: 'mergeWindows', windowIds: mergeIds, currentWindowId: live.currentWindowId })) as {
         targetWindowId: number;
       } | null;
-      setCheckedWindows(new Set());
       if (r) {
         setQuery('');
-        setPane({ kind: 'window', id: r.targetWindowId });
+        setPane({ kind: 'tabs', windowIds: [r.targetWindowId] });
       }
     } finally {
       setMerging(false);
     }
   };
 
-  // Fall back to the first project if the selected one disappears.
-  const activePane: Pane =
-    pane.kind === 'project' && !data.projects[pane.id]
-      ? projects[0]
-        ? { kind: 'project', id: projects[0].id }
-        : { kind: 'none' }
-      : pane.kind === 'window' && live.loaded && !live.windowIds.includes(pane.id)
-        ? { kind: 'none' }
-        : pane.kind === 'none' && projects[0]
-          ? { kind: 'project', id: projects[0].id }
-          : pane;
 
   const createNew = async (name: string, inputs: LinkInput[] = []) => {
     let id = '';
@@ -223,35 +245,34 @@ export function App() {
             </span>
           </h3>
           <ul className="list">
+            <li>
+              <div
+                className={`list-item side-row ${showingTabs && selectedWindows.length === 0 ? 'selected' : ''}`}
+                onClick={() => {
+                  setQuery('');
+                  windowAnchor.current = null;
+                  setPane(ALL_WINDOWS);
+                }}
+              >
+                <span className="grow ellipsis">All windows</span>
+                <span className="badge" title="Unsorted tabs in all windows">
+                  {live.tabs.filter((t) => !isManagerUrl(t.url) && isUnsorted(t.url, sorted)).length}
+                </span>
+              </div>
+            </li>
             {live.windowIds.map((id, i) => {
               const tabs = live.tabs.filter((t) => t.windowId === id && !isManagerUrl(t.url));
               const unsorted = tabs.filter((t) => isUnsorted(t.url, sorted));
               const top = summariseSites(unsorted)[0];
-              const selected = activePane.kind === 'window' && activePane.id === id && !query;
+              const selected = selectedWindows.includes(id);
               return (
                 <li key={id}>
                   <div
-                    className={`list-item side-row ${selected ? 'selected' : ''}`}
-                    onClick={() => {
-                      setQuery('');
-                      setPane({ kind: 'window', id });
-                    }}
+                    className={`list-item side-row window-row ${selected ? 'selected' : ''}`}
+                    title="Click to show this window. ⌘-click to add windows (and merge them)."
+                    onClick={(e) => clickWindow(id, e)}
+                    onMouseDown={(e) => e.shiftKey && e.preventDefault()}
                   >
-                    <input
-                      type="checkbox"
-                      aria-label={`Select Window ${i + 1} to merge`}
-                      title="Select to merge windows"
-                      checked={checkedWindows.has(id)}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) =>
-                        setCheckedWindows((prev) => {
-                          const next = new Set(prev);
-                          if (e.target.checked) next.add(id);
-                          else next.delete(id);
-                          return next;
-                        })
-                      }
-                    />
                     <span className="grow ellipsis">
                       Window {i + 1}
                       {id === live.currentWindowId ? ' (this)' : ''}
@@ -265,24 +286,7 @@ export function App() {
               );
             })}
           </ul>
-          {mergeIds.length === 1 && <p className="hint muted">Tick another window to merge them.</p>}
-          {mergePlan && (
-            <div className="merge-bar">
-              <p>
-                Merge {mergeIds.length} windows ({plural(mergePlan.moving.length, 'tab')} moving) into{' '}
-                <strong>Window {windowNumber(mergePlan.targetWindowId)}</strong>, the biggest.
-              </p>
-              <div className="row">
-                <button className="btn small" onClick={() => setCheckedWindows(new Set())}>
-                  Clear
-                </button>
-                <button className="btn small primary" disabled={merging} onClick={() => void merge()}>
-                  {merging ? 'Merging…' : 'Merge'}
-                </button>
-              </div>
-            </div>
-          )}
-          <p className="hint muted">Showing unsorted tabs: ones not in any project yet. Tick windows to merge them.</p>
+          <p className="hint muted">Showing unsorted tabs: ones not in any project yet. ⌘-click windows to view several or merge them.</p>
         </section>
 
         <section className="projects">
@@ -410,7 +414,7 @@ export function App() {
           <SettingsPane settings={settings} data={data} />
         ) : (
           <LinkPane
-            key={query ? 'search' : activePane.kind === 'project' ? activePane.id : activePane.kind === 'window' ? `w${activePane.id}` : 'none'}
+            key={query ? 'search' : activePane.kind === 'project' ? activePane.id : activePane.kind}
             pane={query ? { kind: 'none' } : activePane}
             query={query}
             data={data}
@@ -423,6 +427,17 @@ export function App() {
               setDropTarget(null);
             }}
             onNewProject={(name, inputs) => void createNew(name, inputs.filter((i) => isWebUrl(i.url)))}
+            onSelectWindows={(ids) => setPane({ kind: 'tabs', windowIds: ids })}
+            merge={
+              mergePlan
+                ? {
+                    label: `Merge ${mergeIds.length} windows into ${windowLabel(mergePlan.targetWindowId)}`,
+                    title: `${plural(mergePlan.moving.length, 'tab')} will move into ${windowLabel(mergePlan.targetWindowId)}, the biggest. You can undo this.`,
+                    busy: merging,
+                    run: () => void merge(),
+                  }
+                : undefined
+            }
           />
         )}
       </main>

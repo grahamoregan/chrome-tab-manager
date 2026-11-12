@@ -43,12 +43,21 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 - A tab is stale if it matches a rule and `now - lastAccessed >= threshold` (default 30 min, configurable). Pinned, audible and active tabs are skipped. Deep links never match.
 - Manual only. Settings has a "test a URL" box.
 
+## Open tabs: All windows and window filters
+- The "Open tabs" sidebar section starts with an **All windows** row, then one row per window. The manager opens on **All windows**.
+- Clicking a window shows only its tabs. Clicking the selected window again, or clicking **All windows**, goes back to all tabs. ⌘-click (Ctrl-click) adds or removes a window from the selection; ⇧-click selects a range. Deselecting the last window goes back to All windows.
+- With more than one window shown (All windows, or several selected), tabs are grouped under a heading per window ("Window 1 · 18 unsorted"); clicking a heading filters to that window.
+- Header title: "All windows", "Window 2" or "Windows 1, 3", with "N unsorted of M tabs". "Focus window" and "New project from this window" only appear when exactly one window is selected.
+- Badges: All windows shows the total unsorted count; each window its own.
+- A selected window that closes drops out of the selection; if none are left, the view returns to All windows.
+- The selection isn't remembered between visits.
+
 ## Merge windows
-- In the manager's "Open tabs" list each window has a checkbox (same pattern as deleting projects). With two or more ticked, a bar appears: "Merge 3 windows (52 tabs moving) into Window 2, the biggest" → **Merge**.
+- Selecting two or more windows (⌘-click) shows a **Merge 3 windows into Window 2** button in the header, with how many tabs will move. (This replaced per-window checkboxes, so there is one selection model.)
 - Target = the selected window with the most tabs (all tabs, sorted or not); ties → the current window, then the lowest window number.
 - **All** tabs move, including pinned tabs (re-pinned after moving, since Chrome unpins tabs that change window) and sorted tabs. Tab groups move as whole groups, keeping their name and colour. The emptied windows close automatically.
 - Undo moves the tabs back into their original windows and positions (restoring pinned state), recreating any window that closed. Tab groups aren't restored by Undo.
-- Clicking a window name still opens its tab list; ticking only selects it for merging.
+- After merging, the view shows the merged window.
 
 ## Safety
 - Every action that closes tabs shows a preview first, then offers Undo. Closed tabs are recorded in "Recently closed by Tab Sort" (Settings), where each can be reopened.
@@ -58,10 +67,10 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 - Selection: click, ⌘-click, ⇧-click, ⌘A, Esc. Drag onto project = move; ⌥ while dropping = copy. Delete/Backspace removes selected links from the project.
 - Link context menu: Open/Focus, Open in new window, Copy to project ▸, Move to project ▸, Remove from this project.
 - Window tab context menu: Focus, Add to project ▸, New project from selection, Close tab(s).
-- **Window lists show unsorted tabs.** A tab is *sorted* once its normalised URL is in at least one project; sorted tabs drop out of the window list as soon as they're added (by drag or right-click), so the list works as an inbox of what's left to file. The manager's own tab is never listed. Other non-web tabs (chrome://, new tab) can't be saved, so they stay listed as unsorted until closed.
-  - Sidebar badge shows the unsorted count per window; the window header shows "N unsorted of M tabs".
+- **Tab lists show unsorted tabs.** A tab is *sorted* once its normalised URL is in at least one project; sorted tabs drop out of the window list as soon as they're added (by drag or right-click), so the list works as an inbox of what's left to file. The manager's own tab is never listed. Other non-web tabs (chrome://, new tab) can't be saved, so they stay listed as unsorted until closed.
+  - Sidebar badges show unsorted counts; the header shows "N unsorted of M tabs".
   - A "Show sorted tabs" toggle in the window header shows every tab (sorted ones get their project chips), e.g. to focus or close them. Off by default.
-  - When every tab in a window is sorted, the pane says so instead of looking empty.
+  - When every tab shown is sorted, the pane says so instead of looking empty.
   - "New project from this window" uses the tabs currently listed (unsorted only, unless the toggle is on).
   - Each tab in a window list has a **×** at the right-hand end of its row (top-right corner of a preview card) that closes that one tab, with Undo and a "Recently closed" entry. It doesn't change the selection or start a drag. Project link lists have no × (removing a link from a project is a different action).
 - **Save everything & close**: saves every web tab into one project "Saved session – <date time>" (option: one project per window), merging duplicates, then closes all tabs except the manager and pinned tabs (pinned tabs are still saved). Undo reopens the tabs *and* removes the session project. *Under review — may be replaced by "Archive & close all".*
@@ -107,4 +116,7 @@ Proposed answers awaiting confirmation: a separate "Archives" sidebar section wh
 5. Save & close, open project, context menus, settings, export/import. ✅
 6. Unsorted window lists, × to close tabs, merge windows. ✅
 7. Manager-first (remove popup). ✅
-8. Archive & close. ⏳ (after decisions)
+8. Right-click menus stay on screen; search covers open tabs. ✅
+9. All windows view, window filters (⌘/⇧-click), merge from selection. ✅
+10. Sorting within projects. ⏳ (design proposed)
+11. Archive & close. ⏳ (after decisions)

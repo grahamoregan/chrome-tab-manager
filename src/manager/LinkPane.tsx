@@ -45,16 +45,23 @@ export function LinkPane(props: {
   onDragStart: (p: DragPayload) => void;
   onDragEnd: () => void;
   onNewProject: (name: string, inputs: LinkInput[]) => void;
+  onSelectWindows: (windowIds: number[]) => void;
+  /** Present when two or more windows are selected. */
+  merge?: { label: string; title: string; busy: boolean; run: () => void };
 }) {
   const { pane, query, data, live, projects } = props;
   const project = pane.kind === 'project' ? data.projects[pane.id] : undefined;
-  const windowIndex = pane.kind === 'window' ? live.windowIds.indexOf(pane.id) : -1;
+  // Tabs view: the windows being shown (all of them when none are selected).
+  const isTabs = pane.kind === 'tabs';
+  const shownWindows = pane.kind === 'tabs' ? (pane.windowIds.length ? pane.windowIds : live.windowIds) : [];
+  const singleWindow = pane.kind === 'tabs' && pane.windowIds.length === 1 ? pane.windowIds[0] : undefined;
+  const windowIndex = singleWindow !== undefined ? live.windowIds.indexOf(singleWindow) : -1;
   const isSearch = query.trim() !== '';
   const [localMode, setLocalMode] = useState<Project['viewMode']>('list');
   const [showSorted, setShowSorted] = useState(false);
   const viewMode = project ? project.viewMode : localMode;
   const sorted = useMemo(() => sortedLinkIds(data), [data]);
-  const windowTabCount = pane.kind === 'window' ? live.tabs.filter((t) => t.windowId === pane.id && !isManagerUrl(t.url)).length : 0;
+  const windowTabCount = isTabs ? live.tabs.filter((t) => shownWindows.includes(t.windowId) && !isManagerUrl(t.url)).length : 0;
 
   const tabItem = (t: LiveTabs['tabs'][number]): Item => ({
     key: `t${t.id}`,
@@ -86,14 +93,14 @@ export function LinkPane(props: {
         .filter((l) => !!l)
         .map((l) => ({ key: l.id, linkId: l.id, url: l.url, title: l.title, addedAt: l.addedAt }));
     }
-    if (pane.kind === 'window') {
+    if (isTabs) {
       return live.tabs
-        .filter((t) => t.windowId === pane.id && !isManagerUrl(t.url) && (showSorted || isUnsorted(t.url, sorted)))
-        .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+        .filter((t) => shownWindows.includes(t.windowId) && !isManagerUrl(t.url) && (showSorted || isUnsorted(t.url, sorted)))
+        .sort((a, b) => live.windowIds.indexOf(a.windowId) - live.windowIds.indexOf(b.windowId) || (a.index ?? 0) - (b.index ?? 0))
         .map(tabItem);
     }
     return [];
-  }, [isSearch, query, data, project, pane, live.tabs, live.windowIds, showSorted, sorted]);
+  }, [isSearch, query, data, project, isTabs, shownWindows.join(','), live.tabs, live.windowIds, showSorted, sorted]);
   const tabResults = isSearch ? items.filter((i) => i.tabId !== undefined) : [];
   const linkResults = isSearch ? items.filter((i) => i.tabId === undefined) : [];
   const windowLabel = (id?: number) => (id === undefined ? '' : `Window ${live.windowIds.indexOf(id) + 1}`);
@@ -218,7 +225,15 @@ export function LinkPane(props: {
         isSearch={isSearch}
         query={query}
         project={project}
-        windowIndex={windowIndex}
+        tabsTitle={
+          singleWindow !== undefined
+            ? `Window ${windowIndex + 1}`
+            : pane.kind === 'tabs' && pane.windowIds.length > 1
+              ? `Windows ${pane.windowIds.map((id) => live.windowIds.indexOf(id) + 1).join(', ')}`
+              : 'All windows'
+        }
+        singleWindow={singleWindow}
+        merge={props.merge}
         count={items.length}
         searchCounts={{ tabs: tabResults.length, links: linkResults.length }}
         windowTabCount={windowTabCount}
@@ -236,10 +251,10 @@ export function LinkPane(props: {
             ? 'No open tabs or saved links match.'
             : project
               ? 'This project is empty. Drag tabs in from a window on the left, or right-click a page and choose “Add to Tab Sort project”.'
-              : pane.kind === 'window'
+              : isTabs
                 ? windowTabCount > 0
-                  ? `All ${plural(windowTabCount, 'tab')} in this window are in a project. Nothing left to sort.`
-                  : 'No tabs in this window.'
+                  ? `All ${plural(windowTabCount, 'tab')} ${singleWindow !== undefined ? 'in this window' : 'here'} are in a project. Nothing left to sort.`
+                  : 'No tabs here.'
                 : 'Create a project, or pick a window on the left to see its tabs.'}
         </p>
       ) : isSearch ? (
@@ -257,6 +272,21 @@ export function LinkPane(props: {
             </section>
           )}
         </>
+      ) : isTabs && shownWindows.length > 1 ? (
+        // Several windows: group tabs under a heading per window.
+        shownWindows
+          .map((wid) => ({ wid, list: items.filter((i) => i.windowId === wid) }))
+          .filter((g) => g.list.length > 0)
+          .map((g) => (
+            <section key={g.wid} className="results">
+              <button className="results-heading window-heading" title="Show only this window" onClick={() => props.onSelectWindows([g.wid])}>
+                {windowLabel(g.wid)}
+                {g.wid === live.currentWindowId ? ' (this)' : ''} · {g.list.length}
+                {showSorted ? '' : ' unsorted'}
+              </button>
+              {renderList(g.list)}
+            </section>
+          ))
       ) : (
         renderList(items)
       )}
@@ -294,7 +324,9 @@ function Header(props: {
   isSearch: boolean;
   query: string;
   project?: Project;
-  windowIndex: number;
+  tabsTitle: string;
+  singleWindow?: number;
+  merge?: { label: string; title: string; busy: boolean; run: () => void };
   count: number;
   searchCounts: { tabs: number; links: number };
   windowTabCount: number;
@@ -342,7 +374,7 @@ function Header(props: {
         {project.name}
       </h2>
     );
-  else if (props.pane.kind === 'window') title = <h2>Window {props.windowIndex + 1}</h2>;
+  else if (props.pane.kind === 'tabs') title = <h2>{props.tabsTitle}</h2>;
   else title = <h2>Tab Sort</h2>;
 
   return (
@@ -352,25 +384,34 @@ function Header(props: {
         <span className="muted">
           {props.isSearch
             ? `${plural(props.searchCounts.tabs, 'open tab')} · ${plural(props.searchCounts.links, 'saved link')}`
-            : props.pane.kind === 'window'
+            : props.pane.kind === 'tabs'
             ? props.showSorted
               ? plural(props.windowTabCount, 'tab')
               : `${props.count} unsorted of ${plural(props.windowTabCount, 'tab')}`
             : plural(props.count, 'link')}
         </span>
       </div>
-      {props.pane.kind === 'window' && !props.isSearch && (
+      {props.pane.kind === 'tabs' && !props.isSearch && (
         <>
           <label className="row toggle">
             <input type="checkbox" checked={props.showSorted} onChange={(e) => props.onShowSorted(e.target.checked)} />
             Show sorted tabs
           </label>
-          <button className="btn" onClick={() => void chrome.windows.update(props.pane.kind === 'window' ? props.pane.id : 0, { focused: true })}>
-            Focus window
-          </button>
-          <button className="btn" disabled={props.count === 0} onClick={props.onNewFromWindow}>
-            New project from this window
-          </button>
+          {props.singleWindow !== undefined && (
+            <>
+              <button className="btn" onClick={() => void chrome.windows.update(props.singleWindow!, { focused: true })}>
+                Focus window
+              </button>
+              <button className="btn" disabled={props.count === 0} onClick={props.onNewFromWindow}>
+                New project from this window
+              </button>
+            </>
+          )}
+          {props.merge && (
+            <button className="btn primary" disabled={props.merge.busy} title={props.merge.title} onClick={props.merge.run}>
+              {props.merge.busy ? 'Merging…' : props.merge.label}
+            </button>
+          )}
         </>
       )}
       {project && !props.isSearch && (
