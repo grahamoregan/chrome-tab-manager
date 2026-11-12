@@ -5,6 +5,8 @@ import { summariseSites } from '../lib/sites';
 import { findStaleFeedTabs } from '../lib/staleFeeds';
 import type { Settings } from '../lib/storage';
 import type { TabLike } from '../lib/tabs';
+import { isUnsorted, sortedLinkIds, type Data } from '../lib/model';
+import { isManagerUrl } from '../lib/actions';
 import { isWebUrl } from '../lib/url';
 import { Favicon, Host, ago, plural } from '../ui/components';
 import type { LiveTabs } from '../ui/hooks';
@@ -23,6 +25,7 @@ export function useQuickCounts(live: LiveTabs, settings: Settings, now: number) 
 
 interface ReviewProps {
   live: LiveTabs;
+  data: Data;
   settings: Settings;
   now: number;
   windowLabel: (windowId: number) => string;
@@ -285,17 +288,20 @@ function GatherReview({ live, windowLabel, onDone }: ReviewProps) {
   );
 }
 
-function SaveAllReview({ live, onDone }: ReviewProps) {
+function SaveAllReview({ live, data, onDone }: ReviewProps) {
   const [perWindow, setPerWindow] = useState(false);
   const [busy, setBusy] = useState(false);
-  const web = live.tabs.filter((t) => isWebUrl(t.url));
+  const saved = useMemo(() => sortedLinkIds(data), [data]);
+  const tabs = live.tabs.filter((t) => !isManagerUrl(t.url));
+  const web = tabs.filter((t) => isWebUrl(t.url) && isUnsorted(t.url, saved));
+  const alreadyInProjects = tabs.filter((t) => isWebUrl(t.url) && !isUnsorted(t.url, saved)).length;
   const pinned = live.tabs.filter((t) => t.pinned).length;
   return (
     <div className="review">
       <ReviewHeader
         title="Save everything & close"
         note="You can undo this straight afterwards: the tabs reopen and the saved project is removed."
-        actionLabel={`Save & close ${plural(live.tabs.length, 'tab')}`}
+        actionLabel={web.length ? `Save ${web.length} & close ${plural(tabs.length, 'tab')}` : `Close ${plural(tabs.length, 'tab')}`}
         disabled={live.tabs.length === 0}
         busy={busy}
         onAction={async () => {
@@ -310,10 +316,22 @@ function SaveAllReview({ live, onDone }: ReviewProps) {
         onCancel={onDone}
       />
       <p>
-        Saves {plural(web.length, 'web tab')} from {plural(live.windowIds.length, 'window')} into{' '}
-        {perWindow ? 'one project per window' : 'a single “Saved session” project'}, then closes every tab except this manager
-        {pinned ? ` and ${plural(pinned, 'pinned tab')}` : ''}. Duplicates are merged.
+        {web.length > 0 ? (
+          <>
+            Saves {plural(web.length, 'unsorted tab')} from {plural(live.windowIds.length, 'window')} into{' '}
+            {perWindow ? 'one project per window' : 'a single “Saved session” project'}, then closes every tab except this manager
+            {pinned ? ` and ${plural(pinned, 'pinned tab')}` : ''}. Duplicates are merged.
+          </>
+        ) : (
+          <>Every tab is already in a project, so nothing new needs saving. This just closes them{pinned ? ` (except ${plural(pinned, 'pinned tab')})` : ''}.</>
+        )}
       </p>
+      {alreadyInProjects > 0 && (
+        <p className="muted">
+          {plural(alreadyInProjects, 'tab')} {alreadyInProjects === 1 ? 'is' : 'are'} already in a project, so {alreadyInProjects === 1 ? 'it' : 'they'}{' '}
+          won't be saved again, just closed.
+        </p>
+      )}
       <label className="row">
         <input type="checkbox" checked={perWindow} onChange={(e) => setPerWindow(e.target.checked)} />
         One project per window

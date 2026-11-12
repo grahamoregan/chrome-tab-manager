@@ -2,7 +2,7 @@
  * Operations that touch Chrome tabs/windows. These run in the background
  * service worker (see messages.ts) so they finish even if the manager tab moves or closes.
  */
-import { addLinks, createProject, type Data, type LinkInput } from './model';
+import { addLinks, createProject, isUnsorted, sortedLinkIds, type Data, type LinkInput } from './model';
 import { planGather, scatteredSites, siteLabel } from './sites';
 import {
   loadData,
@@ -237,10 +237,12 @@ function stamp(now = new Date()): string {
 export async function saveEverything(perWindow: boolean): Promise<{ saved: number; closed: number }> {
   const manager = await openManager();
   const tabs = (await getTabs()).filter((t) => !isManagerUrl(t.url));
-  const web = tabs.filter((t) => isWebUrl(t.url));
+  const dataBefore = await loadData();
+  // Tabs already in a project are safe: close them without saving them again.
+  const alreadySaved = sortedLinkIds(dataBefore);
+  const web = tabs.filter((t) => isWebUrl(t.url) && isUnsorted(t.url, alreadySaved));
   const when = stamp();
 
-  const dataBefore = await loadData();
   let data: Data = dataBefore;
   if (perWindow) {
     const windowIds = [...new Set(web.map((t) => t.windowId))].sort((a, b) => a - b);
@@ -253,8 +255,8 @@ export async function saveEverything(perWindow: boolean): Promise<{ saved: numbe
   await saveData(data);
 
   const toClose = tabs.filter((t) => !t.pinned && t.id !== manager.id).map((t) => t.id);
-  const closed = await closeTabs(toClose, 'Save everything & close', `Saved & closed ${toClose.length} tabs`, { dataBefore });
   const saved = new Set(web.map((t) => normaliseUrl(t.url))).size;
+  const closed = await closeTabs(toClose, 'Save everything & close', `Saved ${saved} and closed ${toClose.length} tabs`, { dataBefore });
   return { saved, closed };
 }
 

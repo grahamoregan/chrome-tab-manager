@@ -9,8 +9,8 @@ import {
   orderedLinks,
   reorderLinks,
   setDone,
+  projectSort,
   setSort,
-  type LinkSort,
   moveLinks,
   isUnsorted,
   removeLinks,
@@ -24,6 +24,7 @@ import {
 } from '../lib/model';
 import { isManagerUrl } from '../lib/actions';
 import { matchesQuery, queryWords } from '../lib/search';
+import { MANUAL, nextSort, sortBy, type SortBy, type SortSpec } from '../lib/sorting';
 import { updateData } from '../lib/storage';
 import { isWebUrl, normaliseUrl } from '../lib/url';
 import { Favicon, Host, ago, plural } from '../ui/components';
@@ -40,17 +41,29 @@ interface Item {
   addedAt?: number;
   tabId?: number;
   windowId?: number;
-  /** Marked done in the current project. */
+  /** Marked read in the current project ("done" in the data). */
   done?: boolean;
+  /** When an open tab was last looked at. */
+  viewedAt?: number;
 }
 
-const SORT_LABELS: Record<LinkSort, string> = {
-  manual: 'Manual order',
-  newest: 'Newest added',
-  oldest: 'Oldest added',
-  title: 'Title',
-  site: 'Site',
-};
+type Column = Exclude<SortBy, 'manual'>;
+const COLUMN_LABELS: Record<Column, string> = { title: 'Title', site: 'Site', added: 'Added', viewed: 'Last viewed' };
+
+/** Choices for the preview-mode dropdown (no column headers there). */
+function sortChoices(dateColumn: 'added' | 'viewed', manualLabel: string): { value: string; label: string; spec: SortSpec }[] {
+  const date = COLUMN_LABELS[dateColumn];
+  return [
+    { value: 'manual', label: manualLabel, spec: MANUAL },
+    { value: `${dateColumn}:desc`, label: `${date}: newest first`, spec: { by: dateColumn, dir: 'desc' } },
+    { value: `${dateColumn}:asc`, label: `${date}: oldest first`, spec: { by: dateColumn, dir: 'asc' } },
+    { value: 'title:asc', label: 'Title A→Z', spec: { by: 'title', dir: 'asc' } },
+    { value: 'title:desc', label: 'Title Z→A', spec: { by: 'title', dir: 'desc' } },
+    { value: 'site:asc', label: 'Site A→Z', spec: { by: 'site', dir: 'asc' } },
+    { value: 'site:desc', label: 'Site Z→A', spec: { by: 'site', dir: 'desc' } },
+  ];
+}
+const specValue = (s: SortSpec) => (s.by === 'manual' ? 'manual' : `${s.by}:${s.dir}`);
 
 const OPEN_CONFIRM_THRESHOLD = 20;
 
@@ -79,8 +92,11 @@ export function LinkPane(props: {
   const [localMode, setLocalMode] = useState<Project['viewMode']>('list');
   const [showSorted, setShowSorted] = useState(false);
   const [showDone, setShowDone] = useState(false);
+  const [tabSort, setTabSort] = useState<SortSpec>(MANUAL);
+  const sortSpec: SortSpec = project ? projectSort(project) : tabSort;
+  const changeSort = (spec: SortSpec) => (project ? void updateData((d) => setSort(d, project.id, spec)) : setTabSort(spec));
   const ordered = useMemo(() => (project ? orderedLinks(data, project) : null), [data, project]);
-  const reorderable = !!project && !isSearch && (project.sort ?? 'manual') === 'manual';
+  const reorderable = !!project && !isSearch && projectSort(project).by === 'manual';
   const reorderKeys = useRef<string[] | null>(null);
   const [dropAt, setDropAt] = useState<{ key: string; edge: 'before' | 'after' } | null>(null);
   const viewMode = project ? project.viewMode : localMode;
@@ -94,6 +110,7 @@ export function LinkPane(props: {
     title: t.title || t.url,
     tabId: t.id,
     windowId: t.windowId,
+    viewedAt: t.lastAccessed,
   });
 
   const items: Item[] = useMemo(() => {
@@ -123,13 +140,15 @@ export function LinkPane(props: {
       return [...ordered.active.map((l) => toItem(l, false)), ...(showDone ? ordered.done.map((l) => toItem(l, true)) : [])];
     }
     if (isTabs) {
-      return live.tabs
+      const tabs = live.tabs
         .filter((t) => shownWindows.includes(t.windowId) && !isManagerUrl(t.url) && (showSorted || isUnsorted(t.url, sorted)))
         .sort((a, b) => live.windowIds.indexOf(a.windowId) - live.windowIds.indexOf(b.windowId) || (a.index ?? 0) - (b.index ?? 0))
         .map(tabItem);
+      // Sorting is stable, so window grouping (applied when rendering) keeps each group sorted.
+      return sortBy(tabs, tabSort, (i) => ({ title: i.title, url: i.url, viewed: i.viewedAt }));
     }
     return [];
-  }, [isSearch, query, data, project, ordered, showDone, isTabs, shownWindows.join(','), live.tabs, live.windowIds, showSorted, sorted]);
+  }, [isSearch, query, data, project, ordered, showDone, isTabs, shownWindows.join(','), live.tabs, live.windowIds, showSorted, sorted, tabSort]);
   const tabResults = isSearch ? items.filter((i) => i.tabId !== undefined) : [];
   const linkResults = isSearch ? items.filter((i) => i.tabId === undefined) : [];
   const windowLabel = (id?: number) => (id === undefined ? '' : `Window ${live.windowIds.indexOf(id) + 1}`);
@@ -225,11 +244,11 @@ export function LinkPane(props: {
           0,
           'separator',
           {
-            label: allDone ? 'Mark as not done' : 'Mark as done',
+            label: allDone ? 'Mark as unread' : 'Mark as read',
             onClick: () =>
               void updateData(
                 (d) => setDone(d, project.id, linkIdsOf(list), !allDone),
-                `Marked ${plural(n, 'link')} as ${allDone ? 'not done' : 'done'}`,
+                `Marked ${plural(n, 'link')} as ${allDone ? 'unread' : 'read'}`,
               ),
           },
           { label: 'Move to top', disabled: notDone.length === 0, onClick: () => void updateData((d) => moveToTop(d, project.id, notDone), `Moved ${plural(notDone.length, 'link')} to the top`) },
@@ -296,8 +315,9 @@ export function LinkPane(props: {
         onViewMode={(m) => (project ? void updateData((d) => setViewMode(d, project.id, m)) : setLocalMode(m))}
         onNewFromWindow={() => props.onNewProject(`Window ${windowIndex + 1} – ${new Date().toLocaleDateString()}`, inputsOf(items))}
         openableCount={items.filter((i) => !i.done && !openKeys.has(i.linkId)).length}
-        sort={project?.sort ?? 'manual'}
-        onSort={(sort) => project && void updateData((d) => setSort(d, project.id, sort))}
+        sortSpec={sortSpec}
+        onSort={changeSort}
+        showSortMenu={!isSearch && viewMode === 'preview' && (!!project || isTabs)}
         doneCount={ordered?.done.length ?? 0}
         toGo={ordered?.active.length ?? 0}
       />
@@ -331,7 +351,9 @@ export function LinkPane(props: {
         </>
       ) : isTabs && shownWindows.length > 1 ? (
         // Several windows: group tabs under a heading per window.
-        shownWindows
+        <>
+        {columnHeader()}
+        {shownWindows
           .map((wid) => ({ wid, list: items.filter((i) => i.windowId === wid) }))
           .filter((g) => g.list.length > 0)
           .map((g) => (
@@ -343,25 +365,72 @@ export function LinkPane(props: {
               </button>
               {renderList(g.list)}
             </section>
-          ))
+          ))}
+        </>
       ) : project && ordered ? (
         <>
+          {ordered.active.length > 0 && columnHeader()}
           {renderList(items.filter((i) => !i.done))}
-          {ordered.active.length === 0 && <p className="muted empty">All caught up: everything in this project is done.</p>}
+          {ordered.active.length === 0 && <p className="muted empty">All caught up: everything in this project is read.</p>}
           {ordered.done.length > 0 && (
             <section className="done-section">
               <button className="results-heading window-heading" aria-expanded={showDone} onClick={() => setShowDone((v) => !v)}>
-                {showDone ? '▾' : '▸'} Done ({ordered.done.length})
+                {showDone ? '▾' : '▸'} Read ({ordered.done.length})
               </button>
               {showDone && renderList(items.filter((i) => i.done))}
             </section>
           )}
         </>
       ) : (
-        renderList(items)
+        <>
+          {isTabs && columnHeader()}
+          {renderList(items)}
+        </>
       )}
     </div>
   );
+
+  /** List-mode column titles; clicking a sortable one cycles its sort. */
+  function columnHeader() {
+    if (viewMode !== 'list' || isSearch) return null;
+    const dateColumn: Column = project ? 'added' : 'viewed';
+    const cell = (col: Column, className: string) => {
+      const active = sortSpec.by === col;
+      const arrow = active ? (sortSpec.dir === 'asc' ? '▲' : '▼') : '';
+      return (
+        <button
+          className={`col ${className} ${active ? 'active' : ''}`}
+          aria-sort={active ? (sortSpec.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+          title={`Sort by ${COLUMN_LABELS[col].toLowerCase()}${active ? ' (click again to ' + (nextSort(sortSpec, col).by === 'manual' ? `go back to ${project ? 'manual' : 'tab'} order)` : 'reverse)') : ''}`}
+          onClick={() => changeSort(nextSort(sortSpec, col))}
+        >
+          {COLUMN_LABELS[col]} <span className="arrow">{arrow}</span>
+        </button>
+      );
+    };
+    return (
+      <div className="col-head" role="row">
+        <span className="col-dot" />
+        {project && (
+          <span className="col col-read" title="Tick links as you read them. Read links move to the Read section at the bottom.">
+            Read
+          </span>
+        )}
+        <span className="col-fav" />
+        <span className="col-title-wrap">
+          {cell('title', 'col-title')}
+          {sortSpec.by !== 'manual' && (
+            <button className="col col-reset" onClick={() => changeSort(MANUAL)}>
+              Back to {project ? 'manual' : 'tab'} order
+            </button>
+          )}
+        </span>
+        {cell('site', 'col-site')}
+        {cell(dateColumn, 'col-date')}
+        {!project && <span className="col-close" />}
+      </div>
+    );
+  }
 
   /** Where in manual order a drop on `item` lands: before it, or before the next link that isn't being dragged. */
   function dropBeforeId(item: Item, edge: 'before' | 'after', moving: string[]): string | null {
@@ -404,7 +473,15 @@ export function LinkPane(props: {
               open={openKeys.has(item.linkId)}
               chips={chips.get(item.linkId) ?? []}
               listChips={item.tabId !== undefined && (isSearch || showSorted)}
-              where={isSearch && item.tabId !== undefined ? windowLabel(item.windowId) : undefined}
+              where={
+                item.tabId === undefined
+                  ? undefined
+                  : isSearch
+                    ? windowLabel(item.windowId)
+                    : item.viewedAt
+                      ? ago(item.viewedAt)
+                      : ''
+              }
               onClick={(e) => sel.click(item.key, e)}
               onDoubleClick={() => void openItems([item])}
               onContextMenu={(e) => onContextMenu(e, item.key)}
@@ -420,7 +497,7 @@ export function LinkPane(props: {
               onRowDrop={reorderable ? (e) => rowDrop(e, item) : undefined}
               onToggleDone={
                 project && !isSearch
-                  ? () => void updateData((d) => setDone(d, project.id, [item.linkId], !item.done), `Marked “${item.title}” as ${item.done ? 'not done' : 'done'}`)
+                  ? () => void updateData((d) => setDone(d, project.id, [item.linkId], !item.done), `Marked “${item.title}” as ${item.done ? 'unread' : 'read'}`)
                   : undefined
               }
             />
@@ -447,8 +524,9 @@ function Header(props: {
   onViewMode: (m: Project['viewMode']) => void;
   onNewFromWindow: () => void;
   openableCount: number;
-  sort: LinkSort;
-  onSort: (s: LinkSort) => void;
+  sortSpec: SortSpec;
+  onSort: (s: SortSpec) => void;
+  showSortMenu: boolean;
   doneCount: number;
   toGo: number;
 }) {
@@ -504,7 +582,7 @@ function Header(props: {
               ? plural(props.windowTabCount, 'tab')
               : `${props.count} unsorted of ${plural(props.windowTabCount, 'tab')}`
             : props.project && props.doneCount
-              ? `${props.toGo} to go · ${props.doneCount} done`
+              ? `${props.toGo} to read · ${props.doneCount} read`
               : plural(props.count, 'link')}
         </span>
       </div>
@@ -531,11 +609,19 @@ function Header(props: {
           )}
         </>
       )}
-      {project && !props.isSearch && (
-        <select aria-label="Sort links" title="Sort links" value={props.sort} onChange={(e) => props.onSort(e.target.value as LinkSort)}>
-          {(Object.keys(SORT_LABELS) as LinkSort[]).map((k) => (
-            <option key={k} value={k}>
-              {SORT_LABELS[k]}
+      {props.showSortMenu && (
+        <select
+          aria-label="Sort"
+          title="Sort"
+          value={specValue(props.sortSpec)}
+          onChange={(e) => {
+            const choice = sortChoices(project ? 'added' : 'viewed', project ? 'Manual order' : 'Tab order').find((c) => c.value === e.target.value);
+            if (choice) props.onSort(choice.spec);
+          }}
+        >
+          {sortChoices(project ? 'added' : 'viewed', project ? 'Manual order' : 'Tab order').map((c) => (
+            <option key={c.value} value={c.value}>
+              {c.label}
             </option>
           ))}
         </select>
@@ -594,8 +680,8 @@ function Row(props: {
       className={`done-tick ${item.done ? 'is-done' : ''}`}
       role="checkbox"
       aria-checked={!!item.done}
-      aria-label={`${item.done ? 'Mark as not done' : 'Mark as done'}: ${item.title}`}
-      title={item.done ? 'Done. Click to mark as not done' : 'Mark as done'}
+      aria-label={`${item.done ? 'Mark as unread' : 'Mark as read'}: ${item.title}`}
+      title={item.done ? 'Read. Click to mark as unread' : 'Mark as read'}
       draggable={false}
       onClick={(e) => {
         e.stopPropagation();

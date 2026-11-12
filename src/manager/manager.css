@@ -66,7 +66,7 @@ html, body, #root { height: 100%; }
 .link-row { cursor: default; }
 .link-row.selected, .card.selected { background: var(--accent-soft); }
 .link-row .host { width: 180px; text-align: right; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.added { width: 90px; text-align: right; flex: none; font-size: 12px; }
+.added { width: 110px; text-align: right; flex: none; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .cards {
   list-style: none;
@@ -277,3 +277,48 @@ code { background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
 .is-done-row .grow, .is-done-row .card-title { color: var(--muted); text-decoration: line-through; }
 .done-section { margin-top: 14px; }
 .pane-header select { padding: 5px 8px; }
+
+/* Column headers (list mode) — widths mirror .link-row */
+.col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+.col-dot { width: 7px; flex: none; }
+.col-fav { width: 16px; flex: none; }
+.col-read { width: 18px; flex: none; display: flex; justify-content: center; overflow: visible; white-space: nowrap; }
+.col-title-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.col-site { width: 180px; flex: none; display: flex; justify-content: flex-end; }
+.col-date { width: 110px; flex: none; display: flex; justify-content: flex-end; }
+.col-head button.col { white-space: nowrap; }
+.col-close { width: 22px; flex: none; }
+.col-head button.col {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: 0;
+  background: none;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  border-radius: 4px;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.col-head button.col:hover { background: var(--surface-2); color: var(--text); }
+.col-head button.col.active { color: var(--accent); }
+.col-head .arrow { font-size: 9px; min-width: 8px; }
+.col-head button.col-reset { text-transform: none; letter-spacing: 0; color: var(--accent); margin-left: 4px; }
+@media (max-width: 760px) {
+  .col-site, .col-date { display: none; }
+}

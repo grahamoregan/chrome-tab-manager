@@ -397,7 +397,7 @@ export function App() {
                       }
                     />
                     <span className="grow ellipsis">{p.name}</span>
-                    <span className="badge" title={`${p.linkIds.length - (p.doneIds?.length ?? 0)} to go · ${p.doneIds?.length ?? 0} done`}>
+                    <span className="badge" title={`${p.linkIds.length - (p.doneIds?.length ?? 0)} to read · ${p.doneIds?.length ?? 0} read`}>
                       {p.linkIds.length - (p.doneIds?.length ?? 0)}
                     </span>
                   </div>
@@ -411,7 +411,7 @@ export function App() {
 
       <main className="main">
         {activePane.kind === 'review' && !query ? (
-          <ReviewPane key={activePane.review} kind={activePane.review} live={live} settings={settings} now={now} windowLabel={windowLabel} onDone={closeReview} />
+          <ReviewPane key={activePane.review} kind={activePane.review} live={live} data={data} settings={settings} now={now} windowLabel={windowLabel} onDone={closeReview} />
         ) : activePane.kind === 'settings' && !query ? (
           <SettingsPane settings={settings} data={data} />
         ) : (

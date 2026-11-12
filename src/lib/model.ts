@@ -1,5 +1,6 @@
 import { matchesQuery, queryWords } from './search';
-import { siteOf, normaliseUrl } from './url';
+import { MANUAL, sortBy, toSortSpec, type SortSpec } from './sorting';
+import { normaliseUrl } from './url';
 
 /** One saved link, shared by every project that contains it. `id` is the normalised URL. */
 export interface Link {
@@ -18,14 +19,15 @@ export interface Project {
   /** Manual order: new links are appended. */
   linkIds: string[];
   viewMode: 'list' | 'preview';
-  sort?: LinkSort;
+  /** Stored sort (older data may hold a plain string). Read it with toSortSpec. */
+  sort?: SortSpec | LegacySort;
   /** Links marked done in this project. */
   doneIds?: string[];
   /** When each link was added to this project. */
   addedAt?: Record<string, number>;
 }
 
-export type LinkSort = 'manual' | 'newest' | 'oldest' | 'title' | 'site';
+type LegacySort = 'manual' | 'newest' | 'oldest' | 'title' | 'site';
 
 export interface Data {
   version: 1;
@@ -177,13 +179,13 @@ export function reorderLinks(data: Data, projectId: string, linkIds: string[], b
   const next = clone(data);
   const np = next.projects[projectId];
   np.linkIds = [...rest.slice(0, at), ...block, ...rest.slice(at)];
-  np.sort = 'manual';
+  np.sort = MANUAL;
   return next;
 }
 
 export function moveToTop(data: Data, projectId: string, linkIds: string[]): Data {
   const first = data.projects[projectId]?.linkIds.find((id) => !linkIds.includes(id)) ?? null;
-  return first === null ? setSort(data, projectId, 'manual') : reorderLinks(data, projectId, linkIds, first);
+  return first === null ? setSort(data, projectId, MANUAL) : reorderLinks(data, projectId, linkIds, first);
 }
 
 export function moveToBottom(data: Data, projectId: string, linkIds: string[]): Data {
@@ -204,20 +206,27 @@ export function nudgeLinks(data: Data, projectId: string, linkIds: string[], dir
   if (idx.length === 0) return data;
   if (dir === -1) {
     const above = visible[idx[0] - 1];
-    return above === undefined ? setSort(data, projectId, 'manual') : reorderLinks(data, projectId, linkIds, above);
+    return above === undefined ? setSort(data, projectId, MANUAL) : reorderLinks(data, projectId, linkIds, above);
   }
   const below = visible[idx[idx.length - 1] + 1];
-  if (below === undefined) return setSort(data, projectId, 'manual');
+  if (below === undefined) return setSort(data, projectId, MANUAL);
   const rest = p.linkIds.filter((id) => !moving.has(id));
   const afterBelow = rest[rest.indexOf(below) + 1] ?? null;
   return reorderLinks(data, projectId, linkIds, afterBelow);
 }
 
-export function setSort(data: Data, projectId: string, sort: LinkSort): Data {
-  if (!data.projects[projectId] || (data.projects[projectId].sort ?? 'manual') === sort) return data;
+export function setSort(data: Data, projectId: string, sort: SortSpec): Data {
+  const p = data.projects[projectId];
+  if (!p) return data;
+  const current = toSortSpec(p.sort);
+  if (current.by === sort.by && current.dir === sort.dir && typeof p.sort === 'object') return data;
   const next = clone(data);
-  next.projects[projectId].sort = sort;
+  next.projects[projectId].sort = { ...sort };
   return next;
+}
+
+export function projectSort(p: Project): SortSpec {
+  return toSortSpec(p.sort);
 }
 
 export function setDone(data: Data, projectId: string, linkIds: string[], done: boolean, now = Date.now()): Data {
@@ -237,30 +246,14 @@ export function addedToProject(data: Data, p: Project, linkId: string): number {
   return p.addedAt?.[linkId] ?? data.links[linkId]?.addedAt ?? 0;
 }
 
-/** The project's links split into to-go and done, each in the project's chosen sort. */
+/** The project's links split into unread and read ("done"), each in the project's chosen sort. */
 export function orderedLinks(data: Data, p: Project): { active: Link[]; done: Link[] } {
-  const sort = p.sort ?? 'manual';
   const links = p.linkIds.map((id) => data.links[id]).filter((l): l is Link => !!l);
-  const added = (l: Link) => addedToProject(data, p, l.id);
-  const byTitle = (a: Link, b: Link) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' });
-  const sorted =
-    sort === 'manual'
-      ? links
-      : [...links].sort((a, b) => {
-          switch (sort) {
-            case 'newest':
-              return added(b) - added(a);
-            case 'oldest':
-              return added(a) - added(b);
-            case 'title':
-              return byTitle(a, b);
-            case 'site':
-              return (siteOf(a.url) ?? '').localeCompare(siteOf(b.url) ?? '') || byTitle(a, b);
-          }
-        });
+  const sorted = sortBy(links, toSortSpec(p.sort), (l) => ({ title: l.title, url: l.url, added: addedToProject(data, p, l.id) }));
   const done = new Set(p.doneIds ?? []);
   return { active: sorted.filter((l) => !done.has(l.id)), done: sorted.filter((l) => done.has(l.id)) };
 }
+
 
 export function moveLinks(
   data: Data,

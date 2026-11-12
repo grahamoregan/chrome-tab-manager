@@ -40,9 +40,9 @@ describe('manual ordering', () => {
     expect(ids(nudgeLinks(d, 'p', [u('c')], -1))).toBe('cabde');
   });
   it('switches the project to manual order when reordering', () => {
-    const d = setSort(setup(), 'p', 'title');
-    expect(d.projects.p.sort).toBe('title');
-    expect(moveToTop(d, 'p', [u('e')]).projects.p.sort).toBe('manual');
+    const d = setSort(setup(), 'p', { by: 'title', dir: 'asc' });
+    expect(d.projects.p.sort).toEqual({ by: 'title', dir: 'asc' });
+    expect(moveToTop(d, 'p', [u('e')]).projects.p.sort).toEqual({ by: 'manual', dir: 'asc' });
   });
 });
 
@@ -50,23 +50,30 @@ describe('sorting is a view only', () => {
   it('sorts by title, site and date added to this project without changing manual order', () => {
     let d = createProject(emptyData(), 'P', [{ url: 'https://z.com/1', title: 'beta' }, { url: 'https://a.com/1', title: 'alpha' }], 100, 'p').data;
     d = addLinks(d, 'p', [{ url: 'https://m.com/1', title: 'gamma' }], 300);
-    expect(active(setSort(d, 'p', 'title'))).toBe('alphabetagamma');
-    expect(active(setSort(d, 'p', 'site'))).toBe('alphagammabeta');
-    expect(active(setSort(d, 'p', 'newest')).startsWith('gamma')).toBe(true);
-    expect(active(setSort(d, 'p', 'oldest')).endsWith('gamma')).toBe(true);
-    expect(setSort(d, 'p', 'title').projects.p.linkIds).toEqual(d.projects.p.linkIds);
+    expect(active(setSort(d, 'p', { by: 'title', dir: 'asc' }))).toBe('alphabetagamma');
+    expect(active(setSort(d, 'p', { by: 'site', dir: 'asc' }))).toBe('alphagammabeta');
+    expect(active(setSort(d, 'p', { by: 'added', dir: 'desc' })).startsWith('gamma')).toBe(true);
+    expect(active(setSort(d, 'p', { by: 'added', dir: 'asc' })).endsWith('gamma')).toBe(true);
+    expect(setSort(d, 'p', { by: 'title', dir: 'asc' }).projects.p.linkIds).toEqual(d.projects.p.linkIds);
   });
   it('uses when a link was added to this project, not when it was first saved', () => {
     let d = createProject(emptyData(), 'Old', [{ url: u('a'), title: 'a' }], 100, 'old').data;
     d = createProject(d, 'P', [{ url: u('b'), title: 'b' }], 200, 'p').data;
     d = copyLinks(d, [u('a')], 'p', 300);
-    expect(active(setSort(d, 'p', 'newest'))).toBe('ab');
+    expect(active(setSort(d, 'p', { by: 'added', dir: 'desc' }))).toBe('ab');
+  });
+  it('still reads sorts stored in the older string form', () => {
+    const d = setup();
+    (d.projects.p as { sort?: unknown }).sort = 'title';
+    expect(active(d)).toBe('abcde');
+    (d.projects.p as { sort?: unknown }).sort = 'newest';
+    expect(active(d)).toBe('abcde'); // all added at the same time: falls back to manual order
   });
   it('falls back to the link save time for data saved before per-project dates existed', () => {
     const d = setup();
     delete d.projects.p.addedAt;
     d.links[u('c')].addedAt = 999;
-    expect(active(setSort(d, 'p', 'newest')).startsWith('c')).toBe(true);
+    expect(active(setSort(d, 'p', { by: 'added', dir: 'desc' })).startsWith('c')).toBe(true);
   });
 });
 
