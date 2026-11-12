@@ -174,3 +174,6 @@ code { background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
   .search { width: 100%; }
   .link-row .host, .added { display: none; }
 }
+
+.toggle { color: var(--muted); cursor: pointer; }
+.list-chips { flex: none; max-width: 40%; overflow: hidden; flex-wrap: nowrap; }

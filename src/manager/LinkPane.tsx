@@ -3,16 +3,19 @@ import {
   addLinks,
   copyLinks,
   moveLinks,
+  isUnsorted,
   removeLinks,
   renameProject,
   searchLinks,
   setViewMode,
+  sortedLinkIds,
   type Data,
   type LinkInput,
   type Project,
 } from '../lib/model';
+import { isManagerUrl } from '../lib/actions';
 import { updateData } from '../lib/storage';
-import { normaliseUrl } from '../lib/url';
+import { isWebUrl, normaliseUrl } from '../lib/url';
 import { Favicon, Host, ago, plural } from '../ui/components';
 import { useThumbnail, type LiveTabs } from '../ui/hooks';
 import { request, type DragPayload, type Pane } from './App';
@@ -46,7 +49,10 @@ export function LinkPane(props: {
   const windowIndex = pane.kind === 'window' ? live.windowIds.indexOf(pane.id) : -1;
   const isSearch = query.trim() !== '';
   const [localMode, setLocalMode] = useState<Project['viewMode']>('list');
+  const [showSorted, setShowSorted] = useState(false);
   const viewMode = project ? project.viewMode : localMode;
+  const sorted = useMemo(() => sortedLinkIds(data), [data]);
+  const windowTabCount = pane.kind === 'window' ? live.tabs.filter((t) => t.windowId === pane.id && !isManagerUrl(t.url)).length : 0;
 
   const items: Item[] = useMemo(() => {
     if (isSearch) {
@@ -60,12 +66,12 @@ export function LinkPane(props: {
     }
     if (pane.kind === 'window') {
       return live.tabs
-        .filter((t) => t.windowId === pane.id)
+        .filter((t) => t.windowId === pane.id && !isManagerUrl(t.url) && (showSorted || isUnsorted(t.url, sorted)))
         .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
         .map((t) => ({ key: `t${t.id}`, linkId: normaliseUrl(t.url), url: t.url, title: t.title || t.url, tabId: t.id }));
     }
     return [];
-  }, [isSearch, query, data, project, pane, live.tabs]);
+  }, [isSearch, query, data, project, pane, live.tabs, showSorted, sorted]);
 
   const order = useMemo(() => items.map((i) => i.key), [items]);
   const sel = useSelection(order);
@@ -78,7 +84,7 @@ export function LinkPane(props: {
   }, [data.projects]);
 
   const selectedItems = (keys: string[]) => keys.map((k) => byKey.get(k)).filter((i): i is Item => !!i);
-  const inputsOf = (list: Item[]): LinkInput[] => list.map((i) => ({ url: i.url, title: i.title }));
+  const inputsOf = (list: Item[]): LinkInput[] => list.filter((i) => isWebUrl(i.url)).map((i) => ({ url: i.url, title: i.title }));
   const linkIdsOf = (list: Item[]) => list.map((i) => i.linkId);
 
   const openItems = async (list: Item[]) => {
@@ -186,6 +192,9 @@ export function LinkPane(props: {
         project={project}
         windowIndex={windowIndex}
         count={items.length}
+        windowTabCount={windowTabCount}
+        showSorted={showSorted}
+        onShowSorted={setShowSorted}
         viewMode={viewMode}
         onViewMode={(m) => (project ? void updateData((d) => setViewMode(d, project.id, m)) : setLocalMode(m))}
         onNewFromWindow={() => props.onNewProject(`Window ${windowIndex + 1} – ${new Date().toLocaleDateString()}`, inputsOf(items))}
@@ -199,7 +208,9 @@ export function LinkPane(props: {
             : project
               ? 'This project is empty. Drag tabs in from a window on the left, or right-click a page and choose “Add to Tab Sort project”.'
               : pane.kind === 'window'
-                ? 'No tabs in this window.'
+                ? windowTabCount > 0
+                  ? `All ${plural(windowTabCount, 'tab')} in this window are in a project. Nothing left to sort.`
+                  : 'No tabs in this window.'
                 : 'Create a project, or pick a window on the left to see its tabs.'}
         </p>
       ) : (
@@ -212,6 +223,7 @@ export function LinkPane(props: {
               selected={sel.selected.has(item.key)}
               open={openKeys.has(item.linkId)}
               chips={chips.get(item.linkId) ?? []}
+              listChips={pane.kind === 'window' && !isSearch && showSorted}
               onClick={(e) => sel.click(item.key, e)}
               onDoubleClick={() => void openItems([item])}
               onContextMenu={(e) => onContextMenu(e, item.key)}
@@ -232,6 +244,9 @@ function Header(props: {
   project?: Project;
   windowIndex: number;
   count: number;
+  windowTabCount: number;
+  showSorted: boolean;
+  onShowSorted: (v: boolean) => void;
   viewMode: Project['viewMode'];
   onViewMode: (m: Project['viewMode']) => void;
   onNewFromWindow: () => void;
@@ -281,10 +296,20 @@ function Header(props: {
     <div className="pane-header row">
       <div className="grow row">
         {title}
-        <span className="muted">{plural(props.count, props.pane.kind === 'window' && !props.isSearch ? 'tab' : 'link')}</span>
+        <span className="muted">
+          {props.pane.kind === 'window' && !props.isSearch
+            ? props.showSorted
+              ? plural(props.windowTabCount, 'tab')
+              : `${props.count} unsorted of ${plural(props.windowTabCount, 'tab')}`
+            : plural(props.count, 'link')}
+        </span>
       </div>
       {props.pane.kind === 'window' && !props.isSearch && (
         <>
+          <label className="row toggle">
+            <input type="checkbox" checked={props.showSorted} onChange={(e) => props.onShowSorted(e.target.checked)} />
+            Show sorted tabs
+          </label>
           <button className="btn" onClick={() => void chrome.windows.update(props.pane.kind === 'window' ? props.pane.id : 0, { focused: true })}>
             Focus window
           </button>
@@ -324,6 +349,7 @@ function Row(props: {
   selected: boolean;
   open: boolean;
   chips: Project[];
+  listChips?: boolean;
   onClick: (e: MouseEvent) => void;
   onDoubleClick: () => void;
   onContextMenu: (e: MouseEvent) => void;
@@ -374,6 +400,15 @@ function Row(props: {
       <span className={`dot ${props.open ? '' : 'off'}`} title={props.open ? 'Open in a tab' : undefined} />
       <Favicon url={item.url} />
       <span className="grow ellipsis">{item.title}</span>
+      {props.listChips && props.chips.length > 0 && (
+        <span className="chips list-chips">
+          {props.chips.map((p) => (
+            <span key={p.id} className="chip">
+              {p.name}
+            </span>
+          ))}
+        </span>
+      )}
       <Host url={item.url} />
       {item.addedAt !== undefined && <span className="added muted">{ago(item.addedAt)}</span>}
     </li>

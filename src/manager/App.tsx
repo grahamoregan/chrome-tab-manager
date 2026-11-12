@@ -1,11 +1,14 @@
 import { useCallback, useMemo, useRef, useState, type DragEvent } from 'react';
+import { isManagerUrl } from '../lib/actions';
 import { send } from '../lib/messages';
 import {
   addLinks,
   copyLinks,
   createProject,
   deleteProjects,
+  isUnsorted,
   moveLinks,
+  sortedLinkIds,
   sortedProjects,
   type LinkInput,
   type Project,
@@ -45,6 +48,7 @@ export function App() {
   const drag = useRef<DragPayload | null>(null);
 
   const projects = useMemo(() => sortedProjects(data, settings.projectSort), [data, settings.projectSort]);
+  const sorted = useMemo(() => sortedLinkIds(data), [data]);
   const closeMenu = useCallback(() => setMenu(null), []);
 
   // Fall back to the first project if the selected one disappears.
@@ -127,8 +131,9 @@ export function App() {
           <h3>Open tabs</h3>
           <ul className="list">
             {live.windowIds.map((id, i) => {
-              const tabs = live.tabs.filter((t) => t.windowId === id);
-              const top = summariseSites(tabs)[0];
+              const tabs = live.tabs.filter((t) => t.windowId === id && !isManagerUrl(t.url));
+              const unsorted = tabs.filter((t) => isUnsorted(t.url, sorted));
+              const top = summariseSites(unsorted)[0];
               const selected = activePane.kind === 'window' && activePane.id === id && !query;
               return (
                 <li key={id}>
@@ -144,12 +149,15 @@ export function App() {
                       {id === live.currentWindowId ? ' (this)' : ''}
                       {top ? <span className="muted"> · {top.site}</span> : null}
                     </span>
-                    <span className="badge">{tabs.length}</span>
+                    <span className="badge" title={`${unsorted.length} unsorted of ${plural(tabs.length, 'tab')}`}>
+                      {unsorted.length}
+                    </span>
                   </div>
                 </li>
               );
             })}
           </ul>
+          <p className="hint muted">Showing unsorted tabs: ones not in any project yet.</p>
         </section>
 
         <section className="projects">

@@ -153,6 +153,18 @@ export function deleteProjects(data: Data, projectIds: string[]): Data {
   return collectGarbage(next);
 }
 
+/** Normalised URLs that are in at least one project. */
+export function sortedLinkIds(data: Data): Set<string> {
+  const ids = new Set<string>();
+  for (const p of Object.values(data.projects)) for (const id of p.linkIds) ids.add(id);
+  return ids;
+}
+
+/** An open tab is unsorted until its URL is saved in some project. */
+export function isUnsorted(url: string, sorted: Set<string>): boolean {
+  return !sorted.has(normaliseUrl(url));
+}
+
 export function projectsContaining(data: Data, linkId: string): Project[] {
   return Object.values(data.projects).filter((p) => p.linkIds.includes(linkId));
 }

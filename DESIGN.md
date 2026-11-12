@@ -47,6 +47,12 @@ Every destructive action shows a preview, then offers Undo. Closed tabs are reco
 - Selection: click, ⌘-click, ⇧-click. Drag onto project = move; ⌥ while dropping = copy.
 - Link context menu: Copy to project ▸, Move to project ▸, Open/Focus, Open in new window, Remove from this project.
 - Left pane: live "Open tabs" (per window) to drag from; "New project from this window".
+- **Window lists show unsorted tabs.** A tab is *sorted* once its normalised URL is in at least one project; sorted tabs drop out of the window list as soon as they're added (by drag, right-click or the popup), so the list works as an inbox of what's left to file. The manager's own tab is never listed. Other non-web tabs (chrome://, new tab) can't be saved, so they stay listed as unsorted until closed.
+  - Sidebar badge shows the unsorted count per window; the window header shows "N unsorted of M tabs".
+  - A "Show sorted tabs" toggle in the window header shows every tab (sorted ones get their project chips), e.g. to focus or close them. Off by default.
+  - When every tab in a window is sorted, the pane says so instead of looking empty.
+  - "New project from this window" uses the tabs currently listed (unsorted only, unless the toggle is on).
+  - The popup's window stats still count all tabs.
 - Save everything & close: single project "Saved session – <date time>" (option: one per window), deduped, then closes all tabs except the manager.
 - Open project: new window, skip already-open links, confirm if > 20, tabs created discarded (lazy).
 - Delete projects (multi-select): never closes tabs; Undo available.

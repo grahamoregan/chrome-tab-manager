@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  addLinks, copyLinks, createProject, deleteProjects, emptyData, mergeImport, moveLinks,
-  parseImport, projectsContaining, removeLinks, searchLinks, sortedProjects,
+  addLinks, copyLinks, createProject, deleteProjects, emptyData, isUnsorted, mergeImport, moveLinks,
+  parseImport, projectsContaining, removeLinks, searchLinks, sortedLinkIds, sortedProjects,
 } from './model';
 
 function setup() {
@@ -51,6 +51,16 @@ describe('model', () => {
     expect(sortedProjects(data, 'recent').map((p) => p.name)).toEqual(['B', 'A']);
     expect(sortedProjects(data, 'name').map((p) => p.name)).toEqual(['A', 'B']);
     expect(searchLinks(data, 'two').map((l) => l.title)).toEqual(['Two']);
+  });
+  it('treats a tab as unsorted until its url is in a project', () => {
+    const { data, a } = setup();
+    const sorted = sortedLinkIds(data);
+    expect(isUnsorted('https://x.com/1#frag', sorted)).toBe(false);
+    expect(isUnsorted('https://x.com/2', sorted)).toBe(false);
+    expect(isUnsorted('https://x.com/3', sorted)).toBe(true);
+    expect(isUnsorted('chrome://newtab/', sorted)).toBe(true);
+    const after = sortedLinkIds(removeLinks(data, a, ['https://x.com/1']));
+    expect(isUnsorted('https://x.com/1', after)).toBe(true);
   });
   it('round-trips export/import', () => {
     const { data } = setup();
