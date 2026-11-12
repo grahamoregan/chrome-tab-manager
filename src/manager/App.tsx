@@ -6,6 +6,7 @@ import {
   copyLinks,
   createProject,
   deleteProjects,
+  findSessionDuplicates,
   isUnsorted,
   moveLinks,
   sortedLinkIds,
@@ -229,7 +230,15 @@ export function App() {
           title="More actions"
           onClick={(e) => {
             const r = e.currentTarget.getBoundingClientRect();
-            setMenu({ x: r.right - 220, y: r.bottom + 4, items: [{ label: 'Save everything & close…', onClick: () => openReview('saveAll') }] });
+            const sessionDupes = findSessionDuplicates(data).length;
+            setMenu({
+              x: r.right - 220,
+              y: r.bottom + 4,
+              items: [
+                { label: 'Save everything & close…', onClick: () => openReview('saveAll') },
+                { label: `Tidy saved sessions…${sessionDupes ? ` (${sessionDupes})` : ''}`, onClick: () => openReview('sessions') },
+              ],
+            });
           }}
         >
           ⋯

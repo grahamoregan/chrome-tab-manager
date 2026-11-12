@@ -5,14 +5,15 @@ import { summariseSites } from '../lib/sites';
 import { findStaleFeedTabs } from '../lib/staleFeeds';
 import type { Settings } from '../lib/storage';
 import type { TabLike } from '../lib/tabs';
-import { isUnsorted, sortedLinkIds, type Data } from '../lib/model';
+import { findSessionDuplicates, isUnsorted, removeSessionDuplicates, sortedLinkIds, type Data } from '../lib/model';
+import { updateData } from '../lib/storage';
 import { isManagerUrl } from '../lib/actions';
 import { isWebUrl } from '../lib/url';
 import { Favicon, Host, ago, plural } from '../ui/components';
 import type { LiveTabs } from '../ui/hooks';
 import { request } from './App';
 
-export type ReviewKind = 'dupes' | 'stale' | 'gather' | 'saveAll';
+export type ReviewKind = 'dupes' | 'stale' | 'gather' | 'saveAll' | 'sessions';
 
 export function useQuickCounts(live: LiveTabs, settings: Settings, now: number) {
   return useMemo(() => {
@@ -42,6 +43,8 @@ export function ReviewPane(props: ReviewProps & { kind: ReviewKind }) {
       return <GatherReview {...props} />;
     case 'saveAll':
       return <SaveAllReview {...props} />;
+    case 'sessions':
+      return <SessionsReview {...props} />;
   }
 }
 
@@ -336,6 +339,90 @@ function SaveAllReview({ live, data, onDone }: ReviewProps) {
         <input type="checkbox" checked={perWindow} onChange={(e) => setPerWindow(e.target.checked)} />
         One project per window
       </label>
+    </div>
+  );
+}
+
+/** Removes links from Saved session projects when they're also in your projects (or a newer session). */
+function SessionsReview({ data, onDone }: ReviewProps) {
+  const dupes = useMemo(() => findSessionDuplicates(data), [data]);
+  const [unticked, setUnticked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const key = (d: (typeof dupes)[number]) => `${d.fromProjectId}|${d.linkId}`;
+  const chosen = dupes.filter((d) => !unticked.has(key(d)));
+  const toggle = (k: string, on: boolean) =>
+    setUnticked((prev) => {
+      const next = new Set(prev);
+      if (on) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+
+  const bySession = new Map<string, typeof dupes>();
+  for (const d of dupes) bySession.set(d.fromProjectId, [...(bySession.get(d.fromProjectId) ?? []), d]);
+  const emptied = [...bySession].filter(([pid, list]) => {
+    const p = data.projects[pid];
+    const removing = new Set(list.filter((d) => !unticked.has(key(d))).map((d) => d.linkId));
+    return p && p.linkIds.every((id) => removing.has(id));
+  }).length;
+
+  return (
+    <div className="review">
+      <ReviewHeader
+        title={`Tidy saved sessions: ${plural(dupes.length, 'duplicate')}`}
+        note="These links were saved by “Save everything & close” but are also in one of your projects (which always keeps its copy) or in a newer saved session. Your own projects aren't changed."
+        actionLabel={`Remove ${plural(chosen.length, 'duplicate')}${emptied ? ` and ${plural(emptied, 'empty session')}` : ''}`}
+        disabled={chosen.length === 0}
+        busy={busy}
+        onAction={async () => {
+          setBusy(true);
+          try {
+            await updateData((d) => removeSessionDuplicates(d, chosen), `Removed ${plural(chosen.length, 'duplicate')} from saved sessions`);
+            onDone();
+          } finally {
+            setBusy(false);
+          }
+        }}
+        onCancel={onDone}
+      />
+      {dupes.length === 0 ? (
+        <p className="muted empty">Nothing to tidy: no saved session repeats a link from your projects or a newer session.</p>
+      ) : (
+        [...bySession].map(([pid, list]) => {
+          const p = data.projects[pid];
+          const removing = list.filter((d) => !unticked.has(key(d))).length;
+          const willEmpty = p && removing === p.linkIds.length;
+          return (
+            <section key={pid} className="dupe-group">
+              <div className="list-item kept">
+                <span className="grow ellipsis">
+                  <strong>{p?.name}</strong>{' '}
+                  <span className="muted">
+                    · {plural(list.length, 'duplicate')} of {plural(p?.linkIds.length ?? 0, 'link')}
+                    {willEmpty ? ' · will be deleted (empty)' : ''}
+                  </span>
+                </span>
+              </div>
+              <ul className="list">
+                {list.map((d) => {
+                  const link = data.links[d.linkId];
+                  const k = key(d);
+                  return (
+                    <li key={k} className={`list-item review-row ${unticked.has(k) ? 'unticked' : ''}`}>
+                      <input type="checkbox" checked={!unticked.has(k)} onChange={(e) => toggle(k, e.target.checked)} aria-label={`Remove ${link?.title} from ${p?.name}`} />
+                      <Favicon url={link?.url ?? d.linkId} />
+                      <span className="grow ellipsis" title={link?.url}>
+                        {link?.title ?? d.linkId}
+                      </span>
+                      <span className="muted kept-in ellipsis">kept in {data.projects[d.keptInProjectId]?.name}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        })
+      )}
     </div>
   );
 }

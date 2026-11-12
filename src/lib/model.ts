@@ -25,6 +25,8 @@ export interface Project {
   doneIds?: string[];
   /** When each link was added to this project. */
   addedAt?: Record<string, number>;
+  /** 'session' = created by Save everything & close. */
+  source?: 'session';
 }
 
 type LegacySort = 'manual' | 'newest' | 'oldest' | 'title' | 'site';
@@ -107,6 +109,68 @@ export function createProject(
     addedAt: Object.fromEntries(linkIds.map((l) => [l, now])),
   };
   return { data: next, projectId: id };
+}
+
+const SESSION_NAME = /^Saved session –/;
+
+/** Created by Save everything & close (flagged, or named that way by older versions). */
+export function isSessionProject(p: Project): boolean {
+  return p.source === 'session' || SESSION_NAME.test(p.name);
+}
+
+export function markSession(data: Data, projectId: string): Data {
+  const next = clone(data);
+  if (next.projects[projectId]) next.projects[projectId].source = 'session';
+  return next;
+}
+
+export interface SessionDuplicate {
+  linkId: string;
+  /** Session project the link will be removed from. */
+  fromProjectId: string;
+  /** Project that keeps it (one of yours, else the newest session). */
+  keptInProjectId: string;
+}
+
+/**
+ * Links saved in session projects that also exist elsewhere. Your own projects
+ * always keep their copy; between sessions only, the newest session keeps it.
+ */
+export function findSessionDuplicates(data: Data): SessionDuplicate[] {
+  const projects = Object.values(data.projects);
+  const sessions = projects.filter(isSessionProject).sort((a, b) => b.createdAt - a.createdAt || b.updatedAt - a.updatedAt);
+  const own = projects.filter((p) => !isSessionProject(p));
+  const out: SessionDuplicate[] = [];
+  const seen = new Set<string>();
+  for (const s of sessions) {
+    for (const linkId of s.linkIds) {
+      if (seen.has(`${s.id}|${linkId}`)) continue;
+      const mine = own.find((p) => p.linkIds.includes(linkId));
+      const inSessions = sessions.filter((x) => x.linkIds.includes(linkId));
+      const keeper = mine ?? inSessions[0];
+      for (const x of inSessions) {
+        seen.add(`${x.id}|${linkId}`);
+        if (x.id !== keeper.id) out.push({ linkId, fromProjectId: x.id, keptInProjectId: keeper.id });
+      }
+    }
+  }
+  return out;
+}
+
+/** Removes the given duplicates from session projects, deleting sessions left empty. */
+export function removeSessionDuplicates(data: Data, dupes: SessionDuplicate[], now = Date.now()): Data {
+  if (dupes.length === 0) return data;
+  const next = clone(data);
+  for (const d of dupes) {
+    const p = next.projects[d.fromProjectId];
+    if (!p || !isSessionProject(p)) continue;
+    p.linkIds = p.linkIds.filter((id) => id !== d.linkId);
+    if (p.doneIds) p.doneIds = p.doneIds.filter((id) => id !== d.linkId);
+    if (p.addedAt) delete p.addedAt[d.linkId];
+    p.updatedAt = now;
+  }
+  for (const p of Object.values(next.projects)) if (isSessionProject(p) && p.linkIds.length === 0) delete next.projects[p.id];
+  return collectGarbage(next);
 }
 
 export function renameProject(data: Data, projectId: string, name: string, now = Date.now()): Data {

@@ -2,7 +2,7 @@
  * Operations that touch Chrome tabs/windows. These run in the background
  * service worker (see messages.ts) so they finish even if the manager tab moves or closes.
  */
-import { addLinks, createProject, isUnsorted, sortedLinkIds, type Data, type LinkInput } from './model';
+import { addLinks, createProject, isUnsorted, markSession, sortedLinkIds, type Data, type LinkInput } from './model';
 import { planGather, scatteredSites, siteLabel } from './sites';
 import {
   loadData,
@@ -247,10 +247,12 @@ export async function saveEverything(perWindow: boolean): Promise<{ saved: numbe
   if (perWindow) {
     const windowIds = [...new Set(web.map((t) => t.windowId))].sort((a, b) => a - b);
     windowIds.forEach((wid, i) => {
-      data = createProject(data, `Saved session – ${when} – Window ${i + 1}`, web.filter((t) => t.windowId === wid).map(tabInput)).data;
+      const r = createProject(data, `Saved session – ${when} – Window ${i + 1}`, web.filter((t) => t.windowId === wid).map(tabInput));
+      data = markSession(r.data, r.projectId);
     });
   } else if (web.length) {
-    data = createProject(data, `Saved session – ${when}`, web.map(tabInput)).data;
+    const r = createProject(data, `Saved session – ${when}`, web.map(tabInput));
+    data = markSession(r.data, r.projectId);
   }
   await saveData(data);
 

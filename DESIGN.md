@@ -16,7 +16,8 @@ Tab-changing actions run in the background service worker (via messages), so the
 
 ## Data model
 - **Link**: one per normalised URL — `{ id (= normalised URL), url, title, favIconUrl, addedAt }`.
-- **Project**: `{ id, name, createdAt, updatedAt, linkIds[], viewMode: 'list'|'preview', sort?, doneIds?, addedAt? }`.
+- **Project**: `{ id, name, createdAt, updatedAt, linkIds[], viewMode: 'list'|'preview', sort?, doneIds?, addedAt?, source? }`.
+  - `source: 'session'` marks projects created by Save everything & close.
   - `linkIds` order **is** the manual order; new links are appended (bottom).
   - `sort`: `{ by: 'manual'|'title'|'site'|'added', dir: 'asc'|'desc' }` (default manual). Older string values (`'newest'`, `'title'`…) are still read.
   - `doneIds`: links **archived** in this project (per project; called "done" in code).
@@ -97,6 +98,16 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 - Moving a link to another project doesn't carry its archived state; copying doesn't either.
 - (Earlier wording: "done", then "read". Not to be confused with the planned "archive & close" below, which is about closing open tabs.)
 
+## Saved sessions and duplicate links
+- Projects created by "Save everything & close" are **session projects** (`source: 'session'`). Ones made before the flag existed are recognised by the name prefix "Saved session –". Renaming a session project keeps the flag.
+- Save everything & close never saves a link that's already in any project (active or archived), so new sessions don't duplicate anything.
+- **Tidy saved sessions…** (⋯ menu, with a count when there's something to tidy) cleans up duplicates from before that, as a review with a checkbox per link:
+  - A link in one of **your** projects **and** in a session: removed from the session(s). Your project's copy always wins.
+  - A link only in **several sessions**: kept in the newest session, removed from the older ones.
+  - Session projects left empty are deleted.
+  - Each row says which project keeps the link. Undo restores everything.
+- Your own (non-session) projects are never changed by this.
+
 ## Search
 - The top-bar box is just **Search** (⌘F or `/` focuses it, Esc clears it). It searches titles and URLs; every word must match, in any order, ignoring case.
 - Results replace the main pane in two sections:
@@ -140,4 +151,5 @@ Proposed answers awaiting confirmation: a separate "Archives" sidebar section wh
 11. Column headers, column sorting, "read" wording; save & close skips saved tabs. ✅
 12. "Read" renamed "Archive"; "Remove sort"; more space after the tick. ✅
 13. Tick replaced by × (archive, then × in Archived removes). ✅
-14. Archive & close. ⏳ (after decisions; may be unnecessary now)
+14. Session projects flagged; "Tidy saved sessions" removes duplicate links from them. ✅
+15. Archive & close. ⏳ (after decisions; may be unnecessary now)

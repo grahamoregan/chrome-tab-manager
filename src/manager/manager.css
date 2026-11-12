@@ -308,3 +308,5 @@ code { background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
 }
 
 .open-dot.left { right: auto; left: 8px; }
+
+.kept-in { max-width: 260px; font-size: 12px; }
