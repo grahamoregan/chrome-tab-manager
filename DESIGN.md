@@ -1,0 +1,61 @@
+# Tab Sort — Design
+
+Agreed design for v1. See `CLAUDE.md` for the original requirements.
+
+## Surfaces
+- **Popup** (toolbar icon): window/tab stats, quick actions (close duplicates, gather site, clear stale feeds, save everything & close), "Save to project…", "Open manager".
+- **Manager** (full tab, `manager.html`): projects pane on the left, links pane on the right, Settings tab. Opening it focuses an existing manager tab rather than creating a second. Shortcut: ⌥⇧T.
+- **Chrome right-click menu** on pages and links: "Add to Tab Sort project ▸".
+- Incognito is ignored.
+
+## Stack
+Manifest V3, TypeScript, Vite + `@crxjs/vite-plugin`, React, Vitest for pure logic.
+Loaded unpacked for personal use. MIT licence. Permissions: `tabs`, `tabGroups`, `storage`,
+`unlimitedStorage`, `contextMenus`, `favicon`, host `<all_urls>` (for `captureVisibleTab`).
+
+## Data model
+- **Link**: one per normalised URL — `{ id, url, title, favIconUrl, addedAt, hasThumbnail }`.
+- **Project**: `{ id, name, createdAt, updatedAt, linkIds[], viewMode: 'list'|'preview' }`.
+- Many-to-many: a link may appear in several projects. Links no project uses are garbage collected (with their thumbnails).
+- Projects + links in `chrome.storage.local`; thumbnails (small JPEG data URLs) in IndexedDB keyed by normalised URL.
+- JSON export/import for backup.
+- Open tabs are matched to saved links by normalised URL ("open" dot, Open vs Focus).
+
+## Thumbnails
+Captured opportunistically when a tab is active and has finished loading (`captureVisibleTab`), downscaled, throttled. Never flips through tabs. Placeholder (favicon + title) until captured.
+
+## URL normalisation & duplicates
+- Strip `#fragment` and tracking params (`utm_*`, `fbclid`, `gclid`, `mc_cid`, `mc_eid`, `igshid`, `trk`, `trkInfo`, `si`, `ref_src`…); keep other query params; lowercase host; drop trailing slash on non-root paths.
+- Duplicates = open tabs with the same normalised URL across all windows. Keep the most recent `lastAccessed`. Never close pinned or audible tabs.
+
+## Gather by site
+- Site = registrable domain (eTLD+1, e.g. `uk.linkedin.com` → `linkedin.com`, `bbc.co.uk`).
+- Target window = window with most tabs of that site; ties → current window. Pinned tabs never moved.
+- Moved tabs put into a tab group named after the site (reuse existing group with that title). Setting to disable grouping.
+- Primary: pick one site from a list sorted by count. Secondary: "tidy all".
+
+## Stale feeds
+- Rules: `{ host, path, match: 'exact'|'prefix' }`. Host matches subdomains; trailing slash and query ignored.
+- Defaults (all exact): `linkedin.com/feed`, `facebook.com/`, `bbc.co.uk/news`, `bbc.com/news`, `instagram.com/`, `x.com/home`, `twitter.com/home`.
+- A tab is stale if it matches a rule and `now - lastAccessed >= threshold` (default 30 min, configurable). Deep links never match.
+- Manual only. Settings has a "test a URL" box.
+
+## Safety
+Every destructive action shows a preview, then offers Undo. Closed tabs are recorded in a "Recently closed by Tab Sort" list (capped) and can be reopened.
+
+## Projects
+- Selection: click, ⌘-click, ⇧-click. Drag onto project = move; ⌥ while dropping = copy.
+- Link context menu: Copy to project ▸, Move to project ▸, Open/Focus, Open in new window, Remove from this project.
+- Left pane: live "Open tabs" (per window) to drag from; "New project from this window".
+- Save everything & close: single project "Saved session – <date time>" (option: one per window), deduped, then closes all tabs except the manager.
+- Open project: new window, skip already-open links, confirm if > 20, tabs created discarded (lazy).
+- Delete projects (multi-select): never closes tabs; Undo available.
+- Flat list sortable by name / recently changed; global search over titles and URLs.
+- List mode: favicon, title, domain, date added, open dot. Preview mode: thumbnail cards with project chips. Mode remembered per project.
+
+## Build order
+1. Scaffold + pure logic with tests.
+2. Popup quick actions + preview/Undo.
+3. Data layer + thumbnails.
+4. Manager.
+5. Save & close, open project, context menus, settings, export/import.
