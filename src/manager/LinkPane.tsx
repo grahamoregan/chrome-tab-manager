@@ -23,6 +23,7 @@ import {
   type Project,
 } from '../lib/model';
 import { isManagerUrl } from '../lib/actions';
+import { closableTabs, openTabsByLink, projectOpenTabs } from '../lib/openLinks';
 import { matchesQuery, queryWords } from '../lib/search';
 import { MANUAL, nextSort, sortBy, type SortBy, type SortSpec } from '../lib/sorting';
 import { updateData } from '../lib/storage';
@@ -32,6 +33,7 @@ import { useThumbnail, type LiveTabs } from '../ui/hooks';
 import { request, type DragPayload, type Pane } from './App';
 import type { MenuItem, MenuState } from './ContextMenu';
 import { useSelection } from './selection';
+import type { TabLike } from '../lib/tabs';
 
 interface Item {
   key: string;
@@ -92,6 +94,11 @@ export function LinkPane(props: {
   const [localMode, setLocalMode] = useState<Project['viewMode']>('list');
   const [showSorted, setShowSorted] = useState(false);
   const [showDone, setShowDone] = useState(false);
+  const [onlyOpen, setOnlyOpen] = useState(false);
+  useEffect(() => setOnlyOpen(false), [project?.id]);
+  const openTabs = useMemo(() => openTabsByLink(live.tabs, isManagerUrl), [live.tabs]);
+  const projectOpen = useMemo(() => (project ? projectOpenTabs(project, openTabs) : null), [project, openTabs]);
+  const filterOpen = !!project && onlyOpen && (projectOpen?.linkIds.length ?? 0) > 0;
   const [tabSort, setTabSort] = useState<SortSpec>(MANUAL);
   const sortSpec: SortSpec = project ? projectSort(project) : tabSort;
   const changeSort = (spec: SortSpec) => (project ? void updateData((d) => setSort(d, project.id, spec)) : setTabSort(spec));
@@ -137,7 +144,11 @@ export function LinkPane(props: {
         addedAt: addedToProject(data, project, l.id),
         done,
       });
-      return [...ordered.active.map((l) => toItem(l, false)), ...(showDone ? ordered.done.map((l) => toItem(l, true)) : [])];
+      const keep = (l: { id: string }) => !filterOpen || openTabs.has(l.id);
+      return [
+        ...ordered.active.filter(keep).map((l) => toItem(l, false)),
+        ...(showDone || filterOpen ? ordered.done.filter(keep).map((l) => toItem(l, true)) : []),
+      ];
     }
     if (isTabs) {
       const tabs = live.tabs
@@ -148,7 +159,7 @@ export function LinkPane(props: {
       return sortBy(tabs, tabSort, (i) => ({ title: i.title, url: i.url, viewed: i.viewedAt }));
     }
     return [];
-  }, [isSearch, query, data, project, ordered, showDone, isTabs, shownWindows.join(','), live.tabs, live.windowIds, showSorted, sorted, tabSort]);
+  }, [isSearch, query, data, project, ordered, showDone, filterOpen, openTabs, isTabs, shownWindows.join(','), live.tabs, live.windowIds, showSorted, sorted, tabSort]);
   const tabResults = isSearch ? items.filter((i) => i.tabId !== undefined) : [];
   const linkResults = isSearch ? items.filter((i) => i.tabId === undefined) : [];
   const windowLabel = (id?: number) => (id === undefined ? '' : `Window ${live.windowIds.indexOf(id) + 1}`);
@@ -156,7 +167,6 @@ export function LinkPane(props: {
   const order = useMemo(() => items.map((i) => i.key), [items]);
   const sel = useSelection(order);
   const byKey = useMemo(() => new Map(items.map((i) => [i.key, i])), [items]);
-  const openKeys = useMemo(() => new Set(live.tabs.map((t) => normaliseUrl(t.url))), [live.tabs]);
   const chips = useMemo(() => {
     const m = new Map<string, Project[]>();
     for (const p of Object.values(data.projects)) for (const id of p.linkIds) m.set(id, [...(m.get(id) ?? []), p]);
@@ -169,6 +179,24 @@ export function LinkPane(props: {
 
   const openItems = async (list: Item[]) => {
     for (const i of list) await request({ type: 'focusOrOpen', url: i.url });
+  };
+
+  const focusTab = (t: TabLike) => {
+    void chrome.tabs.update(t.id, { active: true });
+    void chrome.windows.update(t.windowId, { focused: true });
+  };
+
+  const closeTabList = (tabs: TabLike[], label: string) => {
+    if (tabs.length === 0) return;
+    void request({ type: 'closeTabs', tabIds: tabs.map((t) => t.id), reason: 'Closed from project', label });
+  };
+
+  const linkTabsToClose = (list: Item[]) => closableTabs(list.flatMap((i) => openTabs.get(i.linkId) ?? [])).close;
+
+  const closeProjectTabs = () => {
+    if (!project || !projectOpen) return;
+    const { close } = closableTabs(projectOpen.tabs);
+    closeTabList(close, `Closed ${plural(close.length, 'tab')} from ${project.name}`);
   };
 
   const archiveItems = (list: Item[]) => {
@@ -227,7 +255,7 @@ export function LinkPane(props: {
     const isTab = byKey.get(key)?.tabId !== undefined;
     const list = selectedItems(sel.ensure(key)).filter((i) => (i.tabId !== undefined) === isTab);
     const n = list.length;
-    const allOpen = list.every((i) => openKeys.has(i.linkId));
+    const allOpen = list.every((i) => openTabs.has(i.linkId));
     const openLabel = n === 1 ? (allOpen ? 'Focus tab' : 'Open') : allOpen ? `Focus ${n} tabs` : `Open ${n} links`;
     const items: (MenuItem | 'separator')[] = [];
 
@@ -279,6 +307,10 @@ export function LinkPane(props: {
         );
       }
     }
+    if (!isTab && linkTabsToClose(list).length) {
+      const tabs = linkTabsToClose(list);
+      items.splice(2, 0, { label: tabs.length === 1 ? 'Close tab' : `Close ${tabs.length} tabs`, onClick: () => closeTabList(tabs, `Closed ${plural(tabs.length, 'tab')}`) });
+    }
     props.onMenu({ x: e.clientX, y: e.clientY, items });
   };
 
@@ -327,12 +359,17 @@ export function LinkPane(props: {
         viewMode={viewMode}
         onViewMode={(m) => (project ? void updateData((d) => setViewMode(d, project.id, m)) : setLocalMode(m))}
         onNewFromWindow={() => props.onNewProject(`Window ${windowIndex + 1} – ${new Date().toLocaleDateString()}`, inputsOf(items))}
-        openableCount={items.filter((i) => !i.done && !openKeys.has(i.linkId)).length}
+        openableCount={items.filter((i) => !i.done && !openTabs.has(i.linkId)).length}
         sortSpec={sortSpec}
         onSort={changeSort}
         showSortMenu={!isSearch && viewMode === 'preview' && (!!project || isTabs)}
         doneCount={ordered?.done.length ?? 0}
         toGo={ordered?.active.length ?? 0}
+        openCount={projectOpen?.linkIds.length ?? 0}
+        onlyOpen={filterOpen}
+        onOnlyOpen={setOnlyOpen}
+        closable={projectOpen ? closableTabs(projectOpen.tabs) : { close: [], skipped: 0 }}
+        onCloseOpen={closeProjectTabs}
       />
 
       {items.length === 0 ? (
@@ -384,13 +421,14 @@ export function LinkPane(props: {
         <>
           {ordered.active.length > 0 && columnHeader()}
           {renderList(items.filter((i) => !i.done))}
-          {ordered.active.length === 0 && <p className="muted empty">All caught up: everything in this project is archived.</p>}
-          {ordered.done.length > 0 && (
+          {filterOpen && !items.some((i) => !i.done) && <p className="muted empty">No active links are open.</p>}
+          {!filterOpen && ordered.active.length === 0 && <p className="muted empty">All caught up: everything in this project is archived.</p>}
+          {ordered.done.length > 0 && (!filterOpen || items.some((i) => i.done)) && (
             <section className="done-section">
-              <button className="results-heading window-heading" aria-expanded={showDone} onClick={() => setShowDone((v) => !v)}>
-                {showDone ? '▾' : '▸'} Archived ({ordered.done.length})
+              <button className="results-heading window-heading" aria-expanded={showDone || filterOpen} onClick={() => setShowDone((v) => !v)} disabled={filterOpen}>
+                {showDone || filterOpen ? '▾' : '▸'} Archived ({filterOpen ? items.filter((i) => i.done).length : ordered.done.length})
               </button>
-              {showDone && renderList(items.filter((i) => i.done))}
+              {(showDone || filterOpen) && renderList(items.filter((i) => i.done))}
             </section>
           )}
         </>
@@ -478,7 +516,10 @@ export function LinkPane(props: {
               item={item}
               mode={viewMode}
               selected={sel.selected.has(item.key)}
-              open={openKeys.has(item.linkId)}
+              open={openTabs.has(item.linkId)}
+              openTabs={item.tabId === undefined ? openTabs.get(item.linkId) : undefined}
+              windowLabel={windowLabel}
+              onFocusTab={focusTab}
               chips={chips.get(item.linkId) ?? []}
               listChips={item.tabId !== undefined && (isSearch || showSorted)}
               where={
@@ -539,6 +580,11 @@ function Header(props: {
   showSortMenu: boolean;
   doneCount: number;
   toGo: number;
+  openCount: number;
+  onlyOpen: boolean;
+  onOnlyOpen: (v: boolean) => void;
+  closable: { close: TabLike[]; skipped: number };
+  onCloseOpen: () => void;
 }) {
   const { project } = props;
   const [editing, setEditing] = useState(false);
@@ -591,8 +637,13 @@ function Header(props: {
             ? props.showSorted
               ? plural(props.windowTabCount, 'tab')
               : `${props.count} unsorted of ${plural(props.windowTabCount, 'tab')}`
-            : props.project && props.doneCount
-              ? `${props.toGo} active · ${props.doneCount} archived`
+            : props.project
+              ? [
+                  props.doneCount ? `${props.toGo} active · ${props.doneCount} archived` : plural(props.toGo, 'link'),
+                  props.openCount ? `${props.openCount} open` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
               : plural(props.count, 'link')}
         </span>
       </div>
@@ -636,6 +687,25 @@ function Header(props: {
           ))}
         </select>
       )}
+      {project && !props.isSearch && props.openCount > 0 && (
+        <>
+          <label className="row toggle" title="Show only links that have an open tab">
+            <input type="checkbox" checked={props.onlyOpen} onChange={(e) => props.onOnlyOpen(e.target.checked)} />
+            Only open
+          </label>
+          <button
+            className="btn"
+            disabled={props.closable.close.length === 0}
+            title={
+              'Close the tabs for links in this project. The links stay saved.' +
+              (props.closable.skipped ? ` Skips ${plural(props.closable.skipped, 'pinned or playing tab')}.` : '')
+            }
+            onClick={props.onCloseOpen}
+          >
+            Close open tabs ({props.closable.close.length})
+          </button>
+        </>
+      )}
       {project && !props.isSearch && (
         <button
           className="btn primary"
@@ -666,6 +736,10 @@ function Row(props: {
   mode: Project['viewMode'];
   selected: boolean;
   open: boolean;
+  /** Open tabs for a saved link (not set for rows that are tabs themselves). */
+  openTabs?: TabLike[];
+  windowLabel: (id?: number) => string;
+  onFocusTab: (t: TabLike) => void;
   chips: Project[];
   listChips?: boolean;
   /** Shown in place of the date added, e.g. which window a tab is in. */
@@ -703,6 +777,22 @@ function Row(props: {
     </button>
   );
   const thumb = useThumbnail(item.linkId, mode === 'preview');
+  const tabs = props.openTabs ?? [];
+  const openTag = tabs.length > 0 && (
+    <button
+      className="open-tag"
+      draggable={false}
+      title={tabs.length === 1 ? `Switch to the open tab (${props.windowLabel(tabs[0].windowId)})` : `Switch to the most recently viewed of ${tabs.length} open tabs`}
+      onClick={(e) => {
+        e.stopPropagation();
+        props.onFocusTab(tabs[0]);
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      Open · {tabs.length === 1 ? props.windowLabel(tabs[0].windowId) : `${tabs.length} tabs`}
+    </button>
+  );
   const common = {
     draggable: true,
     onClick: props.onClick,
@@ -720,7 +810,7 @@ function Row(props: {
       <li className={`card ${props.selected ? 'selected' : ''} ${dropClass} ${doneClass}`} {...common}>
         <div className="thumb">
           {thumb ? <img src={thumb} alt="" draggable={false} /> : <Favicon url={item.url} size={32} />}
-          {props.open && <span className={`dot open-dot ${closeButton ? 'left' : ''}`} title="Open in a tab" />}
+          {openTag ? <span className="open-tag-wrap">{openTag}</span> : props.open && <span className={`dot open-dot ${closeButton ? 'left' : ''}`} title="Open in a tab" />}
           {closeButton}
         </div>
         <div className="card-body">
@@ -745,9 +835,10 @@ function Row(props: {
 
   return (
     <li className={`list-item link-row ${props.selected ? 'selected' : ''} ${dropClass} ${doneClass}`} {...common}>
-      <span className={`dot ${props.open ? '' : 'off'}`} title={props.open ? 'Open in a tab' : undefined} />
+      <span className={`dot ${props.open && !openTag ? '' : 'off'}`} title={props.open && !openTag ? 'Open in a tab' : undefined} />
       <Favicon url={item.url} />
       <span className="grow ellipsis">{item.title}</span>
+      {openTag}
       {props.listChips && props.chips.length > 0 && (
         <span className="chips list-chips">
           {props.chips.map((p) => (

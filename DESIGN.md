@@ -27,7 +27,7 @@ Tab-changing actions run in the background service worker (via messages), so the
 - Saved links are independent of tabs: closing a tab never changes a project.
 - Thumbnails: small JPEG blobs in IndexedDB keyed by normalised URL. Thumbnails of pages not in any project are pruned after 3 days.
 - JSON export/import for backup (thumbnails not included).
-- Open tabs are matched to saved links by normalised URL ("open" dot, Open vs Focus).
+- Open tabs are matched to saved links by normalised URL (the "Open" label, Open vs Focus; see "Open tabs in the project view").
 
 ## Thumbnails
 Captured opportunistically when a tab is active and has finished loading (`captureVisibleTab`), downscaled to 400px wide, throttled, and refreshed at most every 30 minutes. Never flips through tabs. Placeholder (favicon) until captured.
@@ -98,6 +98,20 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 - Moving a link to another project doesn't carry its archived state; copying doesn't either.
 - (Earlier wording: "done", then "read". Not to be confused with the planned "archive & close" below, which is about closing open tabs.)
 
+## Terms: tabs and links
+- An **open tab** is live in a window; the Windows side of the sidebar is about tabs, and the aim is to have fewer of them.
+- A **link** is saved in a project (a bookmark, but kept in Tab Sort, not Chrome's bookmark manager, which was considered and rejected). Projects are about links.
+- Saving a link never closes its tab, and closing a tab never changes a project, so the project view has to say plainly which links are still open.
+
+## Open tabs in the project view
+- A link with an open tab (same normalised URL, ignoring the manager's own tab) shows an **Open** label in place of the old small dot: "Open · Window 2", or "Open · 2 tabs" when there's more than one. In preview mode the label sits on the thumbnail. Clicking the label switches to the tab (the most recently viewed one when there are several).
+- Archived links show the label too, since their tabs are just as open.
+- Project header: the count includes how many are open, e.g. "12 links · 4 open" or "8 active · 4 archived · 3 open".
+- **Only open** toggle in the header (shown when anything is open) filters the list to links with an open tab. It isn't remembered between visits.
+- **Close open tabs (n)** button in the header closes every tab whose link is in this project (active or archived). The links stay in the project. Pinned and audible tabs are skipped (the button's tooltip says how many). Undo and "Recently closed" as usual. No preview, because nothing saved is lost.
+- Right-click on open links adds **Close tab** / **Close n tabs**.
+- Sidebar: a project with open tabs shows a small green dot beside its badge; hover says "3 open in tabs".
+
 ## Saved sessions and duplicate links
 - Projects created by "Save everything & close" are **session projects** (`source: 'session'`). Ones made before the flag existed are recognised by the name prefix "Saved session –". Renaming a session project keeps the flag.
 - Save everything & close never saves a link that's already in any project (active or archived), so new sessions don't duplicate anything.
@@ -114,7 +128,7 @@ Captured opportunistically when a tab is active and has finished loading (`captu
   1. **Open tabs** across all windows, sorted or not (the manager's own tab excluded), showing the window and any project chips. They behave like tabs in a window list: × to close, double-click to focus, drag to a project, right-click for Focus / Add to project / Close.
   2. **Saved links** in projects, as before (Open/Focus, Open in new window, Copy to project). A saved link that's already listed under Open tabs isn't repeated; its project chips show it's saved.
 - Open tabs come first because finding a tab is the common case. Either section is hidden when it has no matches.
-- List mode: open dot, favicon, title, domain, date added. Preview mode: thumbnail cards with project chips. Mode remembered per project.
+- List mode: favicon, title, Open label, domain, date added. Preview mode: thumbnail cards with project chips. Mode remembered per project.
 
 ## Manager-first quick actions
 The popup was removed (v0.2); its features moved into the manager:
@@ -153,3 +167,4 @@ Proposed answers awaiting confirmation: a separate "Archives" sidebar section wh
 13. Tick replaced by × (archive, then × in Archived removes). ✅
 14. Session projects flagged; "Tidy saved sessions" removes duplicate links from them. ✅
 15. Archive & close. ⏳ (after decisions; may be unnecessary now)
+16. Open tabs shown in the project view: Open label, open counts, Only open filter, Close open tabs. ✅

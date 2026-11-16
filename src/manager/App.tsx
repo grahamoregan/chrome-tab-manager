@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { isManagerUrl } from '../lib/actions';
+import { openTabsByLink } from '../lib/openLinks';
 import { send } from '../lib/messages';
 import {
   addLinks,
@@ -82,6 +83,7 @@ export function App() {
 
   const projects = useMemo(() => sortedProjects(data, settings.projectSort), [data, settings.projectSort]);
   const sorted = useMemo(() => sortedLinkIds(data), [data]);
+  const openLinks = useMemo(() => openTabsByLink(live.tabs, isManagerUrl), [live.tabs]);
   const closeMenu = useCallback(() => setMenu(null), []);
 
   // Resolve the requested pane against current data: deleted projects and closed windows fall back to All windows.
@@ -406,6 +408,10 @@ export function App() {
                       }
                     />
                     <span className="grow ellipsis">{p.name}</span>
+                    {(() => {
+                      const n = p.linkIds.filter((id) => openLinks.has(id)).length;
+                      return n > 0 && <span className="dot side-open" title={`${n} open in tabs`} />;
+                    })()}
                     <span className="badge" title={`${p.linkIds.length - (p.doneIds?.length ?? 0)} active · ${p.doneIds?.length ?? 0} archived`}>
                       {p.linkIds.length - (p.doneIds?.length ?? 0)}
                     </span>
