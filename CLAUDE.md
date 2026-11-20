@@ -21,7 +21,7 @@ in.
 
 Links can be selected and a right click option allows the user to duplicate the tab. Dragging a link
 to a new project moves that instance. 
-
+[README.md](README.md)
 ## Deduplicate
 When the extension is opened it should the number of windows open and the number of links  per 
 window. There should be an option to close duplicates from the very front of the extension. This should 

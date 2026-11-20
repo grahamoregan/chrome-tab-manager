@@ -1,6 +1,10 @@
 # Tab Sort
 
-A Chrome extension for people with far too many tabs. It can:
+A Chrome extension for people with far too many tabs. This is an example of one of those projects I would
+never have prioritised previously but Claude Code make things like this achievable in such a short
+amount of time now that I can finally get around to some pet projects :)
+
+It can:
 
 - **Close duplicates** across all windows, keeping the copy you used most recently.
 - **Gather tabs by site**: pull every LinkedIn (or any site's) tab into the window that already has the most, optionally in a labelled tab group.
