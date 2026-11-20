@@ -6,13 +6,16 @@ A Chrome extension for people with far too many tabs. It can:
 - **Gather tabs by site**: pull every LinkedIn (or any site's) tab into the window that already has the most, optionally in a labelled tab group.
 - **Clear stale feeds**: close home-feed tabs (LinkedIn feed, Facebook, BBC News front page, X home…) you haven't looked at for 30+ minutes, never touching posts or articles.
 - **Save tabs into projects**, with list and thumbnail preview views, drag-and-drop between projects, and "save everything & close".
-- **Prioritise within a project**: drag links into order (or Move to top / ⌥↑ ⌥↓), click column names to sort by title, site or date (either direction), and tick links off to archive them as you work through what you've saved.
+- **Prioritise within a project**: drag links into order (or Move to top / ⌥↑ ⌥↓), click column names to sort by title, site or date (either direction), and press × to archive links as you work through what you've saved.
+- **See what's still open**: links in a project that also have an open tab are labelled "Open · Window 2" (click to switch to it), and **Close open tabs** closes them while keeping the links saved.
 
 Everything that closes tabs shows a preview first and can be undone. Data stays in your Chrome profile.
 
 ## Install (unpacked)
 
 ```sh
+git clone https://github.com/grahamoregan/chrome-tab-manager.git
+cd chrome-tab-manager
 npm install
 npm run build
 ```
@@ -50,4 +53,4 @@ See `DESIGN.md` for the design decisions.
 
 ## Licence
 
-MIT
+MIT, see [LICENSE](LICENSE).
