@@ -1,4 +1,4 @@
-# Tab Sort
+# Chrome Tab Manager
 
 A Chrome extension for people with far too many tabs. This is an example of one of those projects I would
 never have prioritised previously but Claude Code make things like this achievable in such a short
