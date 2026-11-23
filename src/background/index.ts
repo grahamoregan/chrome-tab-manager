@@ -3,6 +3,7 @@ import {
   focusOrOpen,
   gatherSite,
   mergeWindows,
+  splitWindow,
   openManager,
   openProject,
   openUrlsInNewWindow,
@@ -30,6 +31,8 @@ async function handle(req: Request): Promise<unknown> {
       return tidyAll(req.currentWindowId);
     case 'mergeWindows':
       return mergeWindows(req.windowIds, req.currentWindowId);
+    case 'splitWindow':
+      return splitWindow(req.windowId, req.size);
     case 'saveEverything':
       return saveEverything(req.perWindow);
     case 'saveTabsToProject':

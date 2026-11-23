@@ -52,7 +52,7 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 - The "Open tabs" sidebar section starts with an **All windows** row, then one row per window. The manager opens on **All windows**.
 - Clicking a window shows only its tabs. Clicking the selected window again, or clicking **All windows**, goes back to all tabs. ⌘-click (Ctrl-click) adds or removes a window from the selection; ⇧-click selects a range. Deselecting the last window goes back to All windows.
 - With more than one window shown (All windows, or several selected), tabs are grouped under a heading per window ("Window 1 · 18 unsorted"); clicking a heading filters to that window.
-- Header title: "All windows", "Window 2" or "Windows 1, 3", with "N unsorted of M tabs". "Focus window" and "New project from this window" only appear when exactly one window is selected.
+- Header title: "All windows", "Window 2" or "Windows 1, 3", with "N unsorted of M tabs". "Focus window", "New project from this window" and "Split" (see "Split a window") only appear when exactly one window is selected.
 - Badges: All windows shows the total unsorted count; each window its own.
 - A selected window that closes drops out of the selection; if none are left, the view returns to All windows.
 - The selection isn't remembered between visits.
@@ -63,6 +63,14 @@ Captured opportunistically when a tab is active and has finished loading (`captu
 - **All** tabs move, including pinned tabs (re-pinned after moving, since Chrome unpins tabs that change window) and sorted tabs. Tab groups move as whole groups, keeping their name and colour. The emptied windows close automatically.
 - Undo moves the tabs back into their original windows and positions (restoring pinned state), recreating any window that closed. Tab groups aren't restored by Undo.
 - After merging, the view shows the merged window.
+
+## Split a window
+- Very long windows make it hard to find a tab, so a single selected window with more tabs than the limit gets a **Split into 3 windows** button in the header, beside a **per window** number box (default **80**, remembered as a setting; 5–500).
+- The window keeps its first 80 tabs; the rest move **in order** into new windows of up to 80 each (e.g. 230 tabs → 80 · 80 · 70). The counts include every tab, sorted or not.
+- **Pinned tabs and the manager tab always stay** in the original window and count towards its 80.
+- **Tab groups are never broken up**: a group moves whole to whichever window it starts in, so a window can end up a little over the limit rather than splitting a group. A single group bigger than the limit gets a window of its own.
+- New windows open in the background; the manager stays in front and keeps showing the original window, with the new windows listed in the sidebar.
+- Undo moves every tab back to its original position, and the new windows close as they empty. As with merging, tab groups aren't restored by Undo.
 
 ## Safety
 - Every action that closes tabs shows a preview first, then offers Undo. Closed tabs are recorded in "Recently closed by Tab Sort" (Settings), where each can be reopened.
@@ -168,3 +176,4 @@ Proposed answers awaiting confirmation: a separate "Archives" sidebar section wh
 14. Session projects flagged; "Tidy saved sessions" removes duplicate links from them. ✅
 15. Archive & close. ⏳ (after decisions; may be unnecessary now)
 16. Open tabs shown in the project view: Open label, open counts, Only open filter, Close open tabs. ✅
+17. Split a window into windows of up to 80 tabs. ✅

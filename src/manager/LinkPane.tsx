@@ -33,6 +33,7 @@ import { useThumbnail, type LiveTabs } from '../ui/hooks';
 import { request, type DragPayload, type Pane } from './App';
 import type { MenuItem, MenuState } from './ContextMenu';
 import { useSelection } from './selection';
+import { MAX_SPLIT_SIZE, MIN_SPLIT_SIZE } from '../lib/windows';
 import type { TabLike } from '../lib/tabs';
 
 interface Item {
@@ -69,6 +70,18 @@ const specValue = (s: SortSpec) => (s.by === 'manual' ? 'manual' : `${s.by}:${s.
 
 const OPEN_CONFIRM_THRESHOLD = 20;
 
+export interface SplitControl {
+  /** Text in the per-window box. */
+  size: string;
+  onSize: (v: string) => void;
+  onSizeDone: () => void;
+  label: string;
+  title: string;
+  busy: boolean;
+  /** Missing when the window already fits. */
+  run?: () => void;
+}
+
 export function LinkPane(props: {
   pane: Pane;
   query: string;
@@ -82,6 +95,8 @@ export function LinkPane(props: {
   onSelectWindows: (windowIds: number[]) => void;
   /** Present when two or more windows are selected. */
   merge?: { label: string; title: string; busy: boolean; run: () => void };
+  /** Present when exactly one window is selected. */
+  split?: SplitControl;
 }) {
   const { pane, query, data, live, projects } = props;
   const project = pane.kind === 'project' ? data.projects[pane.id] : undefined;
@@ -351,6 +366,7 @@ export function LinkPane(props: {
         }
         singleWindow={singleWindow}
         merge={props.merge}
+        split={props.split}
         count={items.length}
         searchCounts={{ tabs: tabResults.length, links: linkResults.length }}
         windowTabCount={windowTabCount}
@@ -566,6 +582,7 @@ function Header(props: {
   tabsTitle: string;
   singleWindow?: number;
   merge?: { label: string; title: string; busy: boolean; run: () => void };
+  split?: SplitControl;
   count: number;
   searchCounts: { tabs: number; links: number };
   windowTabCount: number;
@@ -662,6 +679,26 @@ function Header(props: {
                 New project from this window
               </button>
             </>
+          )}
+          {props.split && (
+            <span className="row split-control">
+              <label className="row muted" title="Most tabs per window when splitting">
+                <input
+                  type="number"
+                  className="split-size"
+                  min={MIN_SPLIT_SIZE}
+                  max={MAX_SPLIT_SIZE}
+                  value={props.split.size}
+                  onChange={(e) => props.split!.onSize(e.target.value)}
+                  onBlur={props.split.onSizeDone}
+                  onKeyDown={(e) => e.key === 'Enter' && props.split!.onSizeDone()}
+                />
+                per window
+              </label>
+              <button className="btn" disabled={!props.split.run || props.split.busy} title={props.split.title} onClick={props.split.run}>
+                {props.split.busy ? 'Splitting…' : props.split.label}
+              </button>
+            </span>
           )}
           {props.merge && (
             <button className="btn primary" disabled={props.merge.busy} title={props.merge.title} onClick={props.merge.run}>

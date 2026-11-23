@@ -53,7 +53,9 @@ html, body, #root { height: 100%; }
 
 .link-pane { min-height: 100%; }
 .pane-header { margin-bottom: 12px; flex-wrap: wrap; }
-.pane-header h2 { margin: 0; font-size: 18px; }
+.pane-header h2 { margin: 0; font-size: 18px; white-space: nowrap; }
+.pane-header > .grow { min-width: max-content; }
+.pane-header > .grow > .muted { white-space: nowrap; }
 .pane-header .editable { cursor: text; border-radius: 4px; padding: 0 4px; margin-left: -4px; }
 .pane-header .editable:hover { background: var(--surface-2); }
 .title-input { font-size: 16px; width: 360px; }
@@ -321,3 +323,8 @@ code { background: var(--surface-2); padding: 0 4px; border-radius: 4px; }
 .open-tag-wrap { position: absolute; top: 6px; left: 6px; }
 .open-tag-wrap .open-tag { margin: 0; box-shadow: 0 0 0 2px var(--surface); }
 .side-open { width: 6px; height: 6px; margin-right: 4px; }
+
+/* Split window: "[80] per window  [Split into 3 windows]" */
+.split-control { gap: 8px; }
+.split-control label { gap: 6px; font-size: 13px; white-space: nowrap; }
+.split-size { width: 56px; font: inherit; padding: 3px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); }

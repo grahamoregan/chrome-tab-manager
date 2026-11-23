@@ -1,3 +1,4 @@
+import { DEFAULT_SPLIT_SIZE } from './windows';
 import { emptyData, type Data, type ProjectSort } from './model';
 import { DEFAULT_FEED_RULES, DEFAULT_STALE_MINUTES, type FeedRule } from './staleFeeds';
 
@@ -6,6 +7,8 @@ export interface Settings {
   staleMinutes: number;
   groupGathered: boolean;
   projectSort: ProjectSort;
+  /** Most tabs per window when splitting a window. */
+  splitSize: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -13,6 +16,7 @@ export const DEFAULT_SETTINGS: Settings = {
   staleMinutes: DEFAULT_STALE_MINUTES,
   groupGathered: true,
   projectSort: 'recent',
+  splitSize: DEFAULT_SPLIT_SIZE,
 };
 
 export interface ClosedTab {

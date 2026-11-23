@@ -18,7 +18,7 @@ import {
 import { saveSettings, updateData } from '../lib/storage';
 import { summariseSites } from '../lib/sites';
 import { isWebUrl } from '../lib/url';
-import { planMerge } from '../lib/windows';
+import { clampSplitSize, planMerge, planSplit } from '../lib/windows';
 import { UndoBar, plural } from '../ui/components';
 import { useData, useLiveTabs, useSettings, useUndo } from '../ui/hooks';
 import { ContextMenu, type MenuState } from './ContextMenu';
@@ -50,6 +50,9 @@ export function App() {
   const [query, setQuery] = useState('');
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [merging, setMerging] = useState(false);
+  const [splitting, setSplitting] = useState(false);
+  // The per-window box can be mid-edit (e.g. empty), so keep its text separately from the saved setting.
+  const [splitDraft, setSplitDraft] = useState<string | null>(null);
   const windowAnchor = useRef<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [newName, setNewName] = useState<string | null>(null);
@@ -133,6 +136,30 @@ export function App() {
     setPane({ kind: 'review', review });
   };
   const closeReview = () => setPane(returnPane.current);
+
+  const splitWindowId = selectedWindows.length === 1 ? selectedWindows[0] : undefined;
+  const splitSize = clampSplitSize(Number(splitDraft ?? settings.splitSize));
+  const splitPlan = useMemo(
+    () => (splitWindowId !== undefined ? planSplit(live.tabs, splitWindowId, splitSize, (t) => isManagerUrl(t.url)) : null),
+    [live.tabs, splitWindowId, splitSize],
+  );
+  const commitSplitSize = () => {
+    if (splitDraft === null) return;
+    // Keep the (tidied) text rather than clearing it: the saved setting arrives a moment later,
+    // and falling back to it in between would briefly disable the Split button mid-click.
+    setSplitDraft(String(splitSize));
+    if (splitSize !== settings.splitSize) void saveSettings({ splitSize });
+  };
+  const split = async () => {
+    if (!splitPlan) return;
+    commitSplitSize();
+    setSplitting(true);
+    try {
+      await request({ type: 'splitWindow', windowId: splitPlan.windowId, size: splitSize });
+    } finally {
+      setSplitting(false);
+    }
+  };
 
   const merge = async () => {
     if (!mergePlan) return;
@@ -445,6 +472,21 @@ export function App() {
             }}
             onNewProject={(name, inputs) => void createNew(name, inputs.filter((i) => isWebUrl(i.url)))}
             onSelectWindows={(ids) => setPane({ kind: 'tabs', windowIds: ids })}
+            split={
+              splitWindowId !== undefined
+                ? {
+                    size: splitDraft ?? String(settings.splitSize),
+                    onSize: setSplitDraft,
+                    onSizeDone: commitSplitSize,
+                    label: splitPlan ? `Split into ${splitPlan.newWindows.length + 1} windows` : 'Split',
+                    title: splitPlan
+                      ? `Keeps the first ${splitSize} tabs here and moves ${plural(splitPlan.moving.length, 'tab')} into ${plural(splitPlan.newWindows.length, 'new window')}, in order. Pinned tabs stay, tab groups aren't broken up. You can undo this.`
+                      : `This window already has ${splitSize} tabs or fewer.`,
+                    busy: splitting,
+                    run: splitPlan ? () => void split() : undefined,
+                  }
+                : undefined
+            }
             merge={
               mergePlan
                 ? {

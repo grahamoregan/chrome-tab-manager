@@ -17,7 +17,7 @@ import {
   type UndoEntry,
 } from './storage';
 import { toTabLike, type TabLike } from './tabs';
-import { planMerge } from './windows';
+import { planMerge, planSplit } from './windows';
 import { isWebUrl, normaliseUrl } from './url';
 
 export const MANAGER_PATH = 'src/manager/index.html';
@@ -168,6 +168,38 @@ export async function mergeWindows(windowIds: number[], currentWindowId?: number
   await setUndo({ label: `Merged ${n} windows (${plural(moves.length, 'tab')} moved)`, at: Date.now(), moves });
   await chrome.windows.update(plan.targetWindowId, { focused: true }).catch(() => undefined);
   return { moved: moves.length, targetWindowId: plan.targetWindowId };
+}
+
+/**
+ * Splits one window into windows of at most `size` tabs (see planSplit). New windows open
+ * in the background. Returns the new window ids, or null if the window already fits.
+ */
+export async function splitWindow(windowId: number, size: number): Promise<{ newWindowIds: number[]; moved: number } | null> {
+  const plan = planSplit(await getTabs(), windowId, size, (t) => isManagerUrl(t.url));
+  if (!plan) return null;
+  const moves: TabMove[] = plan.moving.map((t) => ({ tabId: t.id, windowId: t.windowId, index: t.index ?? 0 }));
+  const newWindowIds: number[] = [];
+  for (const units of plan.newWindows) {
+    // Start with a blank tab so a grouped first tab isn't pulled out of its group; removed below.
+    const w = await chrome.windows.create({ focused: false });
+    if (w?.id === undefined) continue;
+    const placeholder = w.tabs?.[0]?.id;
+    newWindowIds.push(w.id);
+    for (const u of units) {
+      if (u.groupId !== undefined) {
+        await chrome.tabGroups.move(u.groupId, { windowId: w.id, index: -1 });
+      } else {
+        await chrome.tabs.move(u.tabs.map((t) => t.id) as [number, ...number[]], { windowId: w.id, index: -1 });
+      }
+    }
+    if (placeholder !== undefined) await chrome.tabs.remove(placeholder).catch(() => undefined);
+  }
+  await setUndo({
+    label: `Split a window of ${plan.keep.length + plan.moving.length} tabs into ${newWindowIds.length + 1}`,
+    at: Date.now(),
+    moves,
+  });
+  return { newWindowIds, moved: moves.length };
 }
 
 function plural(n: number, word: string): string {

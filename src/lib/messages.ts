@@ -6,6 +6,7 @@ export type Request =
   | { type: 'gatherSite'; site: string; currentWindowId?: number }
   | { type: 'tidyAll'; currentWindowId?: number }
   | { type: 'mergeWindows'; windowIds: number[]; currentWindowId?: number }
+  | { type: 'splitWindow'; windowId: number; size: number }
   | { type: 'saveEverything'; perWindow: boolean }
   | { type: 'saveTabsToProject'; tabIds: number[]; target: { projectId: string } | { newName: string } }
   | { type: 'openProject'; projectId: string }
