@@ -9,6 +9,7 @@ It can:
 - **Close duplicates** across all windows, keeping the copy you used most recently.
 - **Gather tabs by site**: pull every LinkedIn (or any site's) tab into the window that already has the most, optionally in a labelled tab group.
 - **Clear stale feeds**: close home-feed tabs (LinkedIn feed, Facebook, BBC News front page, X home…) you haven't looked at for 30+ minutes, never touching posts or articles.
+- **Split huge windows**: select a window and split it into windows of up to 80 tabs (or any number you choose), keeping tab order. Pinned tabs stay put, tab groups move whole, and it can be undone.
 - **Save tabs into projects**, with list and thumbnail preview views, drag-and-drop between projects, and "save everything & close".
 - **Prioritise within a project**: drag links into order (or Move to top / ⌥↑ ⌥↓), click column names to sort by title, site or date (either direction), and press × to archive links as you work through what you've saved.
 - **See what's still open**: links in a project that also have an open tab are labelled "Open · Window 2" (click to switch to it), and **Close open tabs** closes them while keeping the links saved.
